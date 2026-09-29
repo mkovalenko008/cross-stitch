@@ -6,7 +6,7 @@ import { skeinsFor } from '../src/core/constants';
 import { EntrySet } from '../src/core/entries';
 import { KdTree } from '../src/core/kdtree';
 import { PaletteMatcher } from '../src/core/match';
-import { BLEND_LEVELS, buildPattern } from '../src/core/pattern';
+import { BLEND_RULES, buildPattern } from '../src/core/pattern';
 import { SYMBOLS } from '../src/core/symbols';
 import { threadUsage } from '../src/core/threads';
 import { gridHeight, resizeToGrid } from '../src/core/resize';
@@ -299,10 +299,10 @@ describe('смеси ниток (по одной нитке двух цвето�
     expect(sum / 300).toBeLessThan(0.2);
   });
 
-  it('градиент между нитками: без смесей сходство низкое, со смесями — не ниже 85%', () => {
+  it('градиент между нитками: без смесей сходство низкое, «сколько нужно» — не ниже 85%', () => {
     const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 };
-    const plain = buildPattern(gradient(), { ...opts, blends: false }, PALETTES.dmc);
-    const mixed = buildPattern(gradient(), opts, PALETTES.dmc);
+    const plain = buildPattern(gradient(), { ...opts, blendMode: 'none' }, PALETTES.dmc);
+    const mixed = buildPattern(gradient(), { ...opts, blendMode: 'needed' }, PALETTES.dmc);
     expect(plain.style).toBe('flat');
     expect(plain.blendColors).toBe(0);
     expect(plain.similarity).toBeLessThan(0.85);
@@ -319,6 +319,22 @@ describe('смеси ниток (по одной нитке двух цвето�
     expect(mixed.colors.filter((c) => c.parts.length === 2).length).toBe(mixed.blendColors);
   });
 
+  it('«в исключительных случаях»: смесей немного, основа — обычные нитки', () => {
+    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 };
+    const rare = buildPattern(gradient(), { ...opts, blendMode: 'rare' }, PALETTES.dmc);
+    const plain = buildPattern(gradient(), { ...opts, blendMode: 'none' }, PALETTES.dmc);
+    expect(rare.blendColors).toBeGreaterThan(0);
+    expect(rare.blendColors).toBeLessThanOrEqual(Math.max(...BLEND_RULES.rare.budgets));
+    expect(rare.colors.length - rare.blendColors).toBeGreaterThan(rare.blendColors); // обычных ниток больше, чем смесей
+    expect(rare.similarity).toBeGreaterThan(plain.similarity);
+    // смеси — только в клетках, где обычная нитка явно не подходит: картинку из ниток они не трогают
+    const threadsOnly = ['310', '666', '3865'].map((code) => threads.find((t) => t.code === code)!.rgb);
+    const img = image(90, 60, (x) => [...threadsOnly[Math.floor(x / 30)], 255]);
+    const flat = buildPattern(img, { cols: 90, rows: 60, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'rare' }, PALETTES.dmc);
+    expect(flat.blendColors).toBe(0);
+    expect(flat.blendShare).toBe(0);
+  });
+
   it('картинка из ровных цветов ниток — без смесей', () => {
     const cols3 = ['310', '666', '3865'].map((code) => threads.find((t) => t.code === code)!.rgb);
     const img = image(90, 60, (x) => [...cols3[Math.floor(x / 30)], 255]);
@@ -330,7 +346,8 @@ describe('смеси ниток (по одной нитке двух цвето�
   });
 
   it('нитки к покупке: крестик смеси — по половине на каждую нитку', () => {
-    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 }, PALETTES.dmc);
+    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed' }, PALETTES.dmc);
+    expect(p.blendColors).toBeGreaterThan(0);
     const usage = threadUsage(p);
     const total = usage.reduce((s, u) => s + u.stitches, 0);
     expect(total).toBeCloseTo(p.stitches, 6); // каждый крестик — ровно одна «полная» единица расхода
@@ -349,9 +366,13 @@ describe('смеси ниток (по одной нитке двух цвето�
     c.forEach((v) => expect(v >= 100 && v < 105).toBe(true));
   });
 
-  it('лестница смесей начинается с одиночных ниток', () => {
-    expect(BLEND_LEVELS[0]).toBe(0);
-    for (let i = 1; i < BLEND_LEVELS.length; i++) expect(BLEND_LEVELS[i]).toBeGreaterThan(BLEND_LEVELS[i - 1]);
+  it('правила смесей: сначала пробуются обычные нитки, исключительный режим строже', () => {
+    for (const r of Object.values(BLEND_RULES)) {
+      expect(r.budgets[0]).toBe(0);
+      for (let i = 1; i < r.budgets.length; i++) expect(r.budgets[i]).toBeGreaterThan(r.budgets[i - 1]);
+    }
+    expect(BLEND_RULES.rare.tau).toBeGreaterThan(BLEND_RULES.needed.tau);
+    expect(BLEND_RULES.rare.gain).toBeGreaterThan(BLEND_RULES.needed.gain);
   });
 
   it('сходство с фото: одинаковая картинка — 100%', () => {

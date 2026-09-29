@@ -19,7 +19,7 @@ const colors = SYMBOLS.map((symbol, i) => {
   return { code: t.code, name: t.name, rgb: t.rgb, count: 2, symbol, parts: [{ code: t.code, name: t.name, rgb: t.rgb }] };
 });
 const p: Pattern = {
-  cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма', style: 'flat', blendColors: 0,
+  cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма', style: 'flat', blendMode: 'none', blendColors: 0, blendShare: 0,
   accuracy: 1, similarity: 1, minSimilarity: 0, isolated: 0, minStitches: 2, referenceColors: n, stitches: n * 2,
 };
 const fonts = {

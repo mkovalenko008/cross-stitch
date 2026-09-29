@@ -508,8 +508,20 @@ p {
   letter-spacing: -0.224px;
   cursor: pointer;
 }
-.check--field {
-  margin-top: 16px;
+.radio-list {
+  display: grid;
+  gap: 10px;
+}
+.radio-list .check {
+  align-items: flex-start;
+  line-height: 1.35;
+}
+.radio-list .check input {
+  margin-top: 1px;
+  flex: none;
+}
+.radio-list b {
+  font-weight: 600;
 }
 .check input {
   width: 18px;

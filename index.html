@@ -78,13 +78,27 @@
                 <input class="input input--short" id="minSimilarity" type="number" inputmode="numeric" min="0" max="99" step="1" value="85" autocomplete="off" />
                 <span class="size-row__unit">%</span>
               </div>
-              <p class="field__hint">Какая часть схемы издалека должна выглядеть как фото. Сайт выбирает самый простой вариант с таким сходством: если хватает обычных ниток — только они, иначе добавляются смеси.</p>
-              <label class="check check--field">
-                <input type="checkbox" id="blends" checked />
-                <span>Смешивать две нитки в одном крестике</span>
-              </label>
-              <p class="field__hint">В иглу по одной нитке двух цветов — получается промежуточный оттенок, ровный, без зернистости. Так передаются цвета, которых нет среди ниток.</p>
+              <p class="field__hint">Какая часть схемы издалека должна выглядеть как фото.</p>
             </div>
+
+            <fieldset class="field">
+              <legend class="field__label">Смешанные нитки — по одной нитке двух цветов в иглу</legend>
+              <div class="radio-list">
+                <label class="check">
+                  <input type="radio" name="blendMode" value="rare" checked />
+                  <span><b>Только в исключительных случаях</b> — где ни одна нитка не подходит, не больше 20 смесей</span>
+                </label>
+                <label class="check">
+                  <input type="radio" name="blendMode" value="needed" />
+                  <span><b>Сколько нужно для сходства</b> — смеси добавляются, пока не наберётся заданное сходство</span>
+                </label>
+                <label class="check">
+                  <input type="radio" name="blendMode" value="none" />
+                  <span><b>Не смешивать</b> — только обычные нитки</span>
+                </label>
+              </div>
+              <p class="field__hint">Основа схемы — обычные нитки. Смесь ставится, только если обычная нитка заметно отличается от нужного цвета, а смесь даёт явно лучше; каждая клетка остаётся ровной, без зернистости.</p>
+            </fieldset>
 
             <fieldset class="field">
               <legend class="field__label">Нитки</legend>
@@ -205,8 +219,8 @@
               <p>Для каждой клетки ищем ближайшую нитку по формуле CIEDE2000 — она оценивает разницу цветов так, как её видит человек.</p>
             </article>
             <article class="card how__item">
-              <h3>Две нитки в крестике</h3>
-              <p>Если среди ниток нет нужного оттенка, в иглу идут две нитки разных цветов — по одной. Цвет получается промежуточный и ровный, без зернистости. Так схема набирает сходство с фото от 85%.</p>
+              <h3>Смеси — по делу</h3>
+              <p>Основа — обычные нитки. Если среди них нет нужного оттенка, в иглу можно взять две нитки разных цветов, по одной. По умолчанию — только в исключительных случаях.</p>
             </article>
             <article class="card how__item">
               <h3>Точность 99,9%</h3>

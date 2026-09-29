@@ -3,7 +3,7 @@ import { contrastTextIsBlack } from './core/color';
 import { formatInt, formatPercent, sizeCm } from './core/constants';
 import { threadUsage } from './core/threads';
 import { TARGET_ACCURACY } from './core/cleanup';
-import type { Pattern } from './core/pattern';
+import type { BlendMode, Pattern } from './core/pattern';
 import { gridHeight, type RgbaImage } from './core/resize';
 import { PALETTES, type PaletteId } from './palettes';
 import type { ExportKind, WorkerRequest, WorkerResponse } from './workers/protocol';
@@ -32,7 +32,6 @@ const els = {
   sizeHint: $<HTMLParagraphElement>('sizeHint'),
   minStitches: $<HTMLInputElement>('minStitches'),
   minSimilarity: $<HTMLInputElement>('minSimilarity'),
-  blends: $<HTMLInputElement>('blends'),
   statColorsLabel: $<HTMLElement>('statColorsLabel'),
   statThreads: $<HTMLElement>('statThreads'),
   threadsSummary: $<HTMLElement>('threadsSummary'),
@@ -284,6 +283,7 @@ els.form.addEventListener('submit', async (e) => {
   }
   const rows = gridHeight(cols, source.width, source.height);
   const palette = (new FormData(els.form).get('palette') as PaletteId) ?? 'dmc';
+  const blendMode = (new FormData(els.form).get('blendMode') as BlendMode) ?? 'rare';
   const minStitches = Math.max(2, Math.round(Number(els.minStitches.value)) || 10);
   const simValue = Math.round(Number(els.minSimilarity.value));
   const minSimilarity = (els.minSimilarity.value === '' || !Number.isFinite(simValue) ? 85 : Math.min(99, Math.max(0, simValue))) / 100;
@@ -297,7 +297,7 @@ els.form.addEventListener('submit', async (e) => {
     const res = await call(
       {
         type: 'build',
-        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blends: els.blends.checked },
+        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blendMode },
         palette,
       },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
@@ -326,7 +326,9 @@ function renderResult(p: Pattern, requestedMin: number) {
   els.statSimilarity.textContent = formatPercent(p.similarity);
   els.statIsolated.textContent = formatPercent(p.isolated);
   els.statColors.textContent = String(p.colors.length);
-  els.statColorsLabel.textContent = p.blendColors ? `Цветов, из них смесей ${p.blendColors}` : 'Цветов';
+  els.statColorsLabel.textContent = p.blendColors
+    ? `Цветов, из них смесей ${p.blendColors} (${formatPercent(p.blendShare)} крестиков)`
+    : 'Цветов';
   els.statThreads.textContent = String(threadUsage(p).length);
   els.statStitches.textContent = formatInt(p.stitches);
   els.statMin.textContent = String(p.minStitches);
@@ -342,13 +344,12 @@ function renderResult(p: Pattern, requestedMin: number) {
     );
   }
   if (p.similarity < p.minSimilarity) {
-    notes.push(
-      `Сходство ${formatPercent(p.similarity)} — меньше заданных ${Math.round(p.minSimilarity * 100)}%: ` +
-        (els.blends.checked
-          ? `в палитре ${p.paletteTitle} нет нужных оттенков даже для смесей, это самый точный вариант. ` +
-            (p.brand === 'DMC' ? 'Попробуйте нитки Гамма.' : 'Попробуйте нитки DMC.')
-          : 'обычными нитками нужные оттенки не передать. Включите «Смешивать две нитки в одном крестике».'),
-    );
+    const lead = `Сходство ${formatPercent(p.similarity)} — ниже заданных ${Math.round(p.minSimilarity * 100)}%: в картинке много оттенков, которых нет среди ниток ${p.paletteTitle}.`;
+    const other = p.brand === 'DMC' ? 'нитки Гамма' : 'нитки DMC';
+    if (p.blendMode === 'none') notes.push(`${lead} Разрешите смешанные нитки или попробуйте ${other}.`);
+    else if (p.blendMode === 'rare')
+      notes.push(`${lead} Смеси сейчас только в исключительных случаях. Чтобы поднять сходство, выберите «Сколько нужно для сходства» или попробуйте ${other}.`);
+    else notes.push(`${lead} Это самый точный вариант даже со смесями. Попробуйте ${other}.`);
   }
   els.resultNote.textContent = notes.join(' ');
   els.resultNote.hidden = notes.length === 0;
