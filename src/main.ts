@@ -2,7 +2,7 @@ import './style.css';
 import { contrastTextIsBlack } from './core/color';
 import { formatInt, formatPercent, sizeCm, skeinsFor } from './core/constants';
 import { TARGET_ACCURACY } from './core/cleanup';
-import type { Pattern, PatternStyle } from './core/pattern';
+import type { Pattern } from './core/pattern';
 import { gridHeight, type RgbaImage } from './core/resize';
 import { PALETTES, type PaletteId } from './palettes';
 import type { ExportKind, WorkerRequest, WorkerResponse } from './workers/protocol';
@@ -253,7 +253,7 @@ els.width.addEventListener('blur', () => {
 });
 els.minSimilarity.addEventListener('blur', () => {
   const v = Math.round(Number(els.minSimilarity.value));
-  els.minSimilarity.value = String(Number.isFinite(v) && els.minSimilarity.value !== '' ? Math.min(99, Math.max(50, v)) : 85);
+  els.minSimilarity.value = String(Number.isFinite(v) && els.minSimilarity.value !== '' ? Math.min(99, Math.max(0, v)) : 85);
 });
 els.minStitches.addEventListener('blur', () => {
   const v = Math.round(Number(els.minStitches.value));
@@ -278,9 +278,9 @@ els.form.addEventListener('submit', async (e) => {
   }
   const rows = gridHeight(cols, source.width, source.height);
   const palette = (new FormData(els.form).get('palette') as PaletteId) ?? 'dmc';
-  const style = (new FormData(els.form).get('style') as PatternStyle) ?? 'smooth';
   const minStitches = Math.max(2, Math.round(Number(els.minStitches.value)) || 10);
-  const minSimilarity = Math.min(99, Math.max(50, Math.round(Number(els.minSimilarity.value)) || 85)) / 100;
+  const simValue = Math.round(Number(els.minSimilarity.value));
+  const minSimilarity = (els.minSimilarity.value === '' || !Number.isFinite(simValue) ? 85 : Math.min(99, Math.max(0, simValue))) / 100;
 
   busy = true;
   els.go.disabled = true;
@@ -289,7 +289,7 @@ els.form.addEventListener('submit', async (e) => {
   setProgress(els.progressBar, els.progressStage, 0, 'Начинаю');
   try {
     const res = await call(
-      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, style, minSimilarity }, palette },
+      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity }, palette },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
     );
     if (res.type !== 'built') throw new Error('Неожиданный ответ');
@@ -311,7 +311,7 @@ function renderResult(p: Pattern, requestedMin: number) {
   els.resultTitle.textContent = patternTitle;
   els.resultSub.textContent =
     `${p.cols} × ${p.rows} крестиков · ${sizeCm(p.cols)} × ${sizeCm(p.rows)} см на Aida 14 · нитки ${p.paletteTitle} · ` +
-    (p.style === 'smooth' ? 'как на фото' : 'ровные пятна');
+    (p.style === 'smooth' ? 'плавные переходы' : 'ровные пятна');
   els.statAccuracy.textContent = formatPercent(p.accuracy);
   els.statSimilarity.textContent = formatPercent(p.similarity);
   els.statIsolated.textContent = formatPercent(p.isolated);
@@ -329,15 +329,12 @@ function renderResult(p: Pattern, requestedMin: number) {
         `Помогут бо́льшая ширина или картинка с более крупными деталями.`,
     );
   }
-  if (p.style === 'smooth' && p.minSimilarity !== undefined && p.similarity < p.minSimilarity) {
+  if (p.similarity < p.minSimilarity) {
     notes.push(
       `Сходство ${formatPercent(p.similarity)} — меньше заданных ${Math.round(p.minSimilarity * 100)}%: ` +
         `в палитре ${p.paletteTitle} нет нужных оттенков, это самый точный вариант. ` +
         (p.brand === 'DMC' ? 'Попробуйте нитки Гамма — у них больше промежуточных оттенков.' : 'Попробуйте нитки DMC.'),
     );
-  }
-  if (p.style === 'flat' && p.similarity < 0.85) {
-    notes.push('В стиле «Ровные пятна» оттенки между нитками теряются. Для сходства от 85% выберите «Как на фото».');
   }
   els.resultNote.textContent = notes.join(' ');
   els.resultNote.hidden = notes.length === 0;

@@ -3,7 +3,7 @@ import { ACCURACY_DELTA_E, TARGET_ACCURACY, cleanupRareColors, colorAccuracy, mi
 import { despeckle, ditherAssign, farSimilarity, isolatedShare, threadsLinear } from '../src/core/dither';
 import { SRGB_TO_LINEAR, linearToSrgb8, rgb8ToLab } from '../src/core/color';
 import { PaletteMatcher } from '../src/core/match';
-import { SMOOTH_LEVELS, buildPattern } from '../src/core/pattern';
+import { LEVELS, buildPattern } from '../src/core/pattern';
 import { gridHeight, resizeToGrid } from '../src/core/resize';
 import { PALETTES } from '../src/palettes';
 
@@ -184,7 +184,7 @@ describe('метрика точности', () => {
 describe('сборка схемы', () => {
   it('гладкий градиент: без одиночных крестиков, точность считается, символы уникальны', () => {
     const img = image(300, 200, (x, y) => [Math.round((x / 299) * 255), Math.round((y / 199) * 255), 128, 255]);
-    const p = buildPattern(img, { cols: 60, rows: 40, minStitches: 10, transparentEmpty: true, style: 'flat' }, PALETTES.dmc);
+    const p = buildPattern(img, { cols: 60, rows: 40, minStitches: 10, transparentEmpty: true, minSimilarity: 0 }, PALETTES.dmc);
     expect(p.cells.length).toBe(60 * 40);
     expect(p.stitches).toBe(60 * 40);
     for (const c of p.colors) expect(c.count).toBeGreaterThanOrEqual(p.minStitches);
@@ -199,7 +199,7 @@ describe('сборка схемы', () => {
   it('при точности < 99,9% минимум уменьшается, но не ниже 2', () => {
     // шум: много цветов, почти все редкие
     const img = image(80, 80, () => [Math.floor(rnd() * 256), Math.floor(rnd() * 256), Math.floor(rnd() * 256), 255]);
-    const p = buildPattern(img, { cols: 80, rows: 80, minStitches: 10, transparentEmpty: true, style: 'flat' }, PALETTES.gamma);
+    const p = buildPattern(img, { cols: 80, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0 }, PALETTES.gamma);
     expect(p.minStitches).toBeGreaterThanOrEqual(2);
     expect(p.minStitches).toBeLessThan(10);
     for (const c of p.colors) expect(c.count).toBeGreaterThanOrEqual(2);
@@ -244,8 +244,10 @@ describe('стиль «Как на фото»', () => {
 
   it('на плавном градиенте ближе к исходнику, чем «ровные пятна»', () => {
     const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true };
-    const smooth = buildPattern(gradient(), { ...opts, style: 'smooth' }, PALETTES.dmc);
-    const flat = buildPattern(gradient(), { ...opts, style: 'flat' }, PALETTES.dmc);
+    const smooth = buildPattern(gradient(), { ...opts, minSimilarity: 0.85 }, PALETTES.dmc);
+    const flat = buildPattern(gradient(), { ...opts, minSimilarity: 0 }, PALETTES.dmc);
+    expect(flat.style).toBe('flat');
+    expect(smooth.style).toBe('smooth');
     expect(smooth.similarity).toBeGreaterThan(flat.similarity);
     for (const c of smooth.colors) expect(c.count).toBeGreaterThanOrEqual(smooth.minStitches);
     expect(smooth.isolated).toBeLessThan(0.1);
@@ -264,17 +266,28 @@ describe('стиль «Как на фото»', () => {
   });
 
   it('сходство с фото не ниже заданного (85%), если палитра позволяет', () => {
-    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, style: 'smooth', minSimilarity: 0.85 }, PALETTES.dmc);
+    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 }, PALETTES.dmc);
     expect(p.similarity).toBeGreaterThanOrEqual(0.85);
     expect(p.minSimilarity).toBe(0.85);
     // более высокий порог не даёт схему хуже по сходству
-    const strict = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, style: 'smooth', minSimilarity: 0.95 }, PALETTES.dmc);
+    const strict = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.95 }, PALETTES.dmc);
     expect(strict.similarity).toBeGreaterThanOrEqual(p.similarity - 0.005);
   });
 
-  it('уровни «Как на фото» идут от чистого к точному', () => {
-    expect(SMOOTH_LEVELS[0].run).toBe(Infinity);
-    expect(SMOOTH_LEVELS[SMOOTH_LEVELS.length - 1]).toEqual({ run: 0 });
+  it('лестница: ровные пятна → плавные переходы → обычный дизеринг', () => {
+    expect(LEVELS[0]).toEqual({ flat: true });
+    expect(LEVELS[LEVELS.length - 1]).toEqual({ run: 0 });
+  });
+
+  it('картинка из ровных цветов ниток остаётся ровными пятнами — смешивание не нужно', () => {
+    const threads = PALETTES.dmc.threads;
+    const cols3 = ['310', '666', '3865'].map((code) => threads.find((t) => t.code === code)!.rgb);
+    const img = image(90, 60, (x) => [...cols3[Math.floor(x / 30)], 255]);
+    const p = buildPattern(img, { cols: 90, rows: 60, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 }, PALETTES.dmc);
+    expect(p.style).toBe('flat');
+    expect(p.colors.length).toBe(3);
+    expect(p.similarity).toBeGreaterThanOrEqual(0.85);
+    expect(p.isolated).toBe(0);
   });
 
   it('сходство с фото: одинаковая картинка — 100%', () => {

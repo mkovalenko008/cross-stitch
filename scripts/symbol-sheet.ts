@@ -20,7 +20,7 @@ const colors = SYMBOLS.map((symbol, i) => {
 });
 const p: Pattern = {
   cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма', style: 'flat',
-  accuracy: 1, similarity: 1, isolated: 0, minStitches: 2, referenceColors: n, stitches: n * 2,
+  accuracy: 1, similarity: 1, minSimilarity: 0, isolated: 0, minStitches: 2, referenceColors: n, stitches: n * 2,
 };
 const fonts = {
   regular: new Uint8Array(readFileSync(new URL('../public/fonts/DejaVuSans.ttf', import.meta.url))),

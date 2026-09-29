@@ -72,19 +72,14 @@
               <p class="field__hint" id="sizeHint"></p>
             </div>
 
-            <fieldset class="field">
-              <legend class="field__label">Стиль схемы</legend>
-              <div class="choice">
-                <label class="choice__item">
-                  <input type="radio" name="style" value="smooth" checked />
-                  <span class="choice__box"><span class="choice__name">Как на фото</span><span class="choice__meta">Плавные переходы: цвета смешиваются узором из крестиков</span></span>
-                </label>
-                <label class="choice__item">
-                  <input type="radio" name="style" value="flat" />
-                  <span class="choice__box"><span class="choice__name">Ровные пятна</span><span class="choice__meta">Каждая клетка — ближайшая нитка, переходы ступеньками</span></span>
-                </label>
+            <div class="field">
+              <label class="field__label" for="minSimilarity">Сходство с фото, не меньше</label>
+              <div class="size-row">
+                <input class="input input--short" id="minSimilarity" type="number" inputmode="numeric" min="0" max="99" step="1" value="85" autocomplete="off" />
+                <span class="size-row__unit">%</span>
               </div>
-            </fieldset>
+              <p class="field__hint">Сайт выбирает самый аккуратный вариант с таким сходством: если хватает ровных пятен — будут они, иначе оттенки между нитками соберутся из соседних крестиков. Выше число — ближе к фото, но больше смен ниток. 0 — только ровные пятна.</p>
+            </div>
 
             <fieldset class="field">
               <legend class="field__label">Нитки</legend>
@@ -103,11 +98,6 @@
             <details class="more">
               <summary>Дополнительно</summary>
               <div class="more__body">
-                <div class="field">
-                  <label class="field__label" for="minSimilarity">Минимальное сходство с фото, %</label>
-                  <input class="input input--short" id="minSimilarity" type="number" inputmode="numeric" min="50" max="99" step="1" value="85" />
-                  <p class="field__hint">Для стиля «Как на фото». Сайт выбирает вариант с наименьшим числом одиночных крестиков, при котором сходство не ниже этого значения. Если в палитре не хватает нужных оттенков, получится самый точный из возможных вариантов.</p>
-                </div>
                 <div class="field">
                   <label class="field__label" for="minStitches">Минимум крестиков на цвет</label>
                   <input class="input input--short" id="minStitches" type="number" inputmode="numeric" min="2" max="100" step="1" value="10" />
@@ -196,8 +186,8 @@
               <p>Для каждой клетки ищем ближайшую нитку по формуле CIEDE2000 — она оценивает разницу цветов так, как её видит человек.</p>
             </article>
             <article class="card how__item">
-              <h3>Как на фото</h3>
-              <p>Оттенки, которых нет среди ниток, собираются из соседних крестиков — как точки в живописи. Сайт подбирает вариант с наименьшим числом одиночных крестиков, при котором сходство с фото не ниже 85%.</p>
+              <h3>Сходство от 85%</h3>
+              <p>Сайт выбирает самый аккуратный вариант со сходством с фото от 85%. Если ровных пятен не хватает, оттенки между нитками собираются из соседних крестиков — как точки в живописи.</p>
             </article>
             <article class="card how__item">
               <h3>Точность 99,9%</h3>

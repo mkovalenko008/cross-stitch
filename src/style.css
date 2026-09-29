@@ -407,6 +407,11 @@ p {
   gap: 20px;
   flex-wrap: wrap;
 }
+.size-row__unit {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+}
 .size-row__out {
   display: flex;
   flex-direction: column;

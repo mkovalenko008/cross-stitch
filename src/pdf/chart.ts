@@ -80,7 +80,7 @@ function drawCover(
     ['Цветов', String(p.colors.length)],
     ['Крестиков', formatInt(p.stitches)],
     ['Нитки', p.paletteTitle === p.brand ? p.brand : `${p.paletteTitle} (${p.brand})`],
-    ['Стиль', p.style === 'smooth' ? 'как на фото (плавные переходы)' : 'ровные пятна'],
+    ['Рисунок', p.style === 'smooth' ? 'плавные переходы' : 'ровные пятна'],
     ['Сходство с фото', formatPercent(p.similarity)],
     ['Точность передачи цвета', formatPercent(p.accuracy)],
   ];

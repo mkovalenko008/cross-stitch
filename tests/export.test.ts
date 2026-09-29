@@ -27,7 +27,7 @@ function testPattern(cols: number, rows: number, withHoles = true): Pattern {
   }
   return buildPattern(
     { width: w, height: rows * 4, data },
-    { cols, rows, minStitches: 10, transparentEmpty: true, style: 'smooth' },
+    { cols, rows, minStitches: 10, transparentEmpty: true },
     PALETTES.dmc,
   );
 }
@@ -121,7 +121,7 @@ describe('OXS', () => {
 
   it('Гамма пишется как «Gamma»', () => {
     const img = { width: 20, height: 20, data: new Uint8ClampedArray(20 * 20 * 4).fill(200) };
-    const g = buildPattern(img, { cols: 20, rows: 20, minStitches: 10, transparentEmpty: true, style: 'smooth' }, PALETTES.gamma);
+    const g = buildPattern(img, { cols: 20, rows: 20, minStitches: 10, transparentEmpty: true }, PALETTES.gamma);
     expect(buildOxs(g, 'x')).toMatch(/number="Gamma\s+\d{4}"/);
   });
 });

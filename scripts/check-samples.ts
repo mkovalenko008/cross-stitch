@@ -1,7 +1,7 @@
 // Прогон на тестовой картинке: строит схемы на 100 и 300 крестиков, пишет PDF и OXS
 // в samples-out/ и печатает время и сводку.
 // Запуск: npm run check-samples -- путь/к/картинке.png [ширина ...]
-// Стили: STYLES=smooth,flat (по умолчанию оба).
+// Порог сходства: SIM=0.85,0 (по умолчанию 0.85; 0 — ровные пятна).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { PNG } from 'pngjs';
@@ -12,7 +12,6 @@ import { buildChartPdf } from '../src/pdf/chart';
 import { buildColorsPdf } from '../src/pdf/colors';
 import { buildOxs } from '../src/export/oxs';
 import { PALETTES, type PaletteId } from '../src/palettes';
-import type { PatternStyle } from '../src/core/pattern';
 
 const [imagePath, ...widthArgs] = process.argv.slice(2);
 if (!imagePath) {
@@ -29,18 +28,18 @@ const name = basename(imagePath, extname(imagePath));
 const outDir = new URL('../samples-out/', import.meta.url);
 mkdirSync(outDir, { recursive: true });
 
-const styles = (process.env.STYLES ?? 'smooth,flat').split(',') as PatternStyle[];
+const targets = (process.env.SIM ?? '0.85').split(',').map(Number);
 for (const pid of ['dmc', 'gamma'] as PaletteId[]) {
-  for (const cols of widths) for (const style of styles) {
+  for (const cols of widths) for (const minSimilarity of targets) {
     const rows = gridHeight(cols, png.width, png.height);
     let t = performance.now();
     const p = buildPattern(
       { width: png.width, height: png.height, data: png.data },
-      { cols, rows, minStitches: 10, transparentEmpty: true, style },
+      { cols, rows, minStitches: 10, transparentEmpty: true, minSimilarity },
       PALETTES[pid],
     );
     const tPattern = performance.now() - t;
-    const base = `${name}_${cols}_${pid}_${style}`;
+    const base = `${name}_${cols}_${pid}_sim${Math.round(minSimilarity * 100)}`;
     t = performance.now();
     const chart = buildChartPdf(p, name, fonts);
     const tChart = performance.now() - t;
@@ -55,7 +54,7 @@ for (const pid of ['dmc', 'gamma'] as PaletteId[]) {
     writeFileSync(new URL(`${base}.oxs`, outDir), oxs);
     const kb = (n: number) => `${Math.round(n / 1024)} КБ`;
     console.log(
-      `${pid} ${style} ${cols}×${rows}: цветов ${p.colors.length} (в эталоне ${p.referenceColors}), точность ${formatPercent(p.accuracy)}, ` +
+      `${pid} ${p.style} ${cols}×${rows}: цветов ${p.colors.length} (в эталоне ${p.referenceColors}), точность ${formatPercent(p.accuracy)}, ` +
         `сходство ${formatPercent(p.similarity)}, одиночных ${formatPercent(p.isolated)}, ` +
         `минимум ${p.minStitches}; схема ${tPattern.toFixed(0)} мс; PDF-схема ${tChart.toFixed(0)} мс ${kb(chart.length)}; ` +
         `PDF-цвета ${tColors.toFixed(0)} мс ${kb(colors.length)}; OXS ${tOxs.toFixed(0)} мс ${kb(oxs.length)}`,
