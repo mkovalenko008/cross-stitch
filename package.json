@@ -1,0 +1,30 @@
+{
+  "name": "cross-stitch",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "palettes": "node scripts/build-palettes.mjs",
+    "check-samples": "vite-node scripts/check-samples.ts"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2"
+  },
+  "devDependencies": {
+    "@types/fontkit": "^2.0.9",
+    "@types/node": "^24.19.0",
+    "@types/pngjs": "^6.0.5",
+    "fast-xml-parser": "^5.11.2",
+    "fontkit": "^2.0.4",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  }
+}
