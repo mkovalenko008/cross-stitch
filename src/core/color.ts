@@ -140,3 +140,23 @@ export function lightnessLowerBound(L1: number, L2: number): number {
   const SL = 1 + (0.015 * Lm) / Math.sqrt(20 + Lm);
   return Math.abs(L2 - L1) / SL;
 }
+
+const C26 = Math.cos((26 * Math.PI) / 180);
+const S26 = Math.sin((26 * Math.PI) / 180);
+const H26 = (26 * Math.PI) / 180;
+
+/**
+ * Lab → DIN99o (DIN 6176). В этом пространстве обычное евклидово расстояние близко
+ * к воспринимаемой разнице цветов (и к CIEDE2000), поэтому оно годится для быстрого
+ * отбора кандидатов в k-d дереве.
+ */
+export function labToDin99o(L: number, a: number, b: number, out: Float64Array | number[], offset = 0): void {
+  const e = a * C26 + b * S26;
+  const f = 0.83 * (-a * S26 + b * C26);
+  const g = Math.sqrt(e * e + f * f);
+  const c = Math.log(1 + 0.075 * g) / 0.0435;
+  const h = Math.atan2(f, e) + H26;
+  out[offset] = 303.67 * Math.log(1 + 0.0039 * L);
+  out[offset + 1] = c * Math.cos(h);
+  out[offset + 2] = c * Math.sin(h);
+}

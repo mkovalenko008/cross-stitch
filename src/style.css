@@ -508,6 +508,9 @@ p {
   letter-spacing: -0.224px;
   cursor: pointer;
 }
+.check--field {
+  margin-top: 16px;
+}
 .check input {
   width: 18px;
   height: 18px;
@@ -600,9 +603,9 @@ p {
 }
 .stats {
   margin: 48px auto 0;
-  max-width: 760px;
+  max-width: 860px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 32px var(--element-gap);
 }
 .stats__hint {
@@ -650,6 +653,9 @@ p {
   justify-content: center;
   gap: 12px;
 }
+.legend--first {
+  margin-top: 56px;
+}
 .downloads__hint {
   margin-top: 14px;
   color: var(--color-slate);
@@ -658,7 +664,7 @@ p {
 }
 
 .legend {
-  margin: 56px auto 0;
+  margin: 24px auto 0;
   max-width: 760px;
   text-align: left;
   background: var(--color-studio-mist);

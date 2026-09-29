@@ -78,7 +78,12 @@
                 <input class="input input--short" id="minSimilarity" type="number" inputmode="numeric" min="0" max="99" step="1" value="85" autocomplete="off" />
                 <span class="size-row__unit">%</span>
               </div>
-              <p class="field__hint">Сайт выбирает самый аккуратный вариант с таким сходством: если хватает ровных пятен — будут они, иначе оттенки между нитками соберутся из соседних крестиков. Выше число — ближе к фото, но больше смен ниток. 0 — только ровные пятна.</p>
+              <p class="field__hint">Какая часть схемы издалека должна выглядеть как фото. Сайт выбирает самый простой вариант с таким сходством: если хватает обычных ниток — только они, иначе добавляются смеси.</p>
+              <label class="check check--field">
+                <input type="checkbox" id="blends" checked />
+                <span>Смешивать две нитки в одном крестике</span>
+              </label>
+              <p class="field__hint">В иглу по одной нитке двух цветов — получается промежуточный оттенок, ровный, без зернистости. Так передаются цвета, которых нет среди ниток.</p>
             </div>
 
             <fieldset class="field">
@@ -136,13 +141,15 @@
         <dl class="stats">
           <div class="stats__item"><dt>Сходство с фото</dt><dd id="statSimilarity"></dd></div>
           <div class="stats__item"><dt>Точность передачи цвета</dt><dd id="statAccuracy"></dd></div>
-          <div class="stats__item"><dt>Цветов</dt><dd id="statColors"></dd></div>
+          <div class="stats__item"><dt id="statColorsLabel">Цветов</dt><dd id="statColors"></dd></div>
+          <div class="stats__item"><dt>Ниток к покупке</dt><dd id="statThreads"></dd></div>
           <div class="stats__item"><dt>Крестиков</dt><dd id="statStitches"></dd></div>
           <div class="stats__item"><dt>Минимум крестиков на цвет</dt><dd id="statMin"></dd></div>
           <div class="stats__item"><dt>Одиночных крестиков</dt><dd id="statIsolated"></dd></div>
         </dl>
         <p class="stats__hint">
           Сходство — какая часть схемы издалека выглядит как фото (разница цвета ΔE ≤ 3), цель — от 85%.
+          «1 + 1» в списке — смесь: в иглу по одной нитке двух цветов.
           Точность — сколько клеток сохранили свою нитку после удаления редких цветов.
         </p>
         <p class="note" id="resultNote" hidden></p>
@@ -160,14 +167,26 @@
         </div>
         <p class="error" id="exportError" role="alert" hidden></p>
 
-        <details class="legend" open>
-          <summary id="legendSummary">Цвета и нитки</summary>
+        <details class="legend legend--first" open>
+          <summary id="legendSummary">Цвета схемы</summary>
           <div class="legend__table-wrap">
             <table class="legend__table">
               <thead>
-                <tr><th>Символ</th><th>Номер</th><th>Название</th><th class="num">Крестиков</th><th class="num">Пасм</th></tr>
+                <tr><th>Символ</th><th>Номер</th><th>Название</th><th class="num">Нитки</th><th class="num">Крестиков</th></tr>
               </thead>
               <tbody id="legendBody"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="legend" open>
+          <summary id="threadsSummary">Нитки к покупке</summary>
+          <div class="legend__table-wrap">
+            <table class="legend__table">
+              <thead>
+                <tr><th>Цвет</th><th>Номер</th><th>Название</th><th class="num">Крестиков</th><th class="num">Пасм</th></tr>
+              </thead>
+              <tbody id="threadsBody"></tbody>
             </table>
           </div>
         </details>
@@ -186,8 +205,8 @@
               <p>Для каждой клетки ищем ближайшую нитку по формуле CIEDE2000 — она оценивает разницу цветов так, как её видит человек.</p>
             </article>
             <article class="card how__item">
-              <h3>Сходство от 85%</h3>
-              <p>Сайт выбирает самый аккуратный вариант со сходством с фото от 85%. Если ровных пятен не хватает, оттенки между нитками собираются из соседних крестиков — как точки в живописи.</p>
+              <h3>Две нитки в крестике</h3>
+              <p>Если среди ниток нет нужного оттенка, в иглу идут две нитки разных цветов — по одной. Цвет получается промежуточный и ровный, без зернистости. Так схема набирает сходство с фото от 85%.</p>
             </article>
             <article class="card how__item">
               <h3>Точность 99,9%</h3>

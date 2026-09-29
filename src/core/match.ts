@@ -1,22 +1,32 @@
 import { ciede2000, lightnessLowerBound, rgb8ToLab } from './color';
 
+/** Набор цветов, с которым работают чистка и метрика точности (палитра ниток или варианты со смесями). */
+export interface ColorSet {
+  readonly size: number;
+  /** Lab всех цветов: [L, a, b] × size. */
+  readonly lab: Float64Array;
+  /** ΔE2000 между цветами i и j. */
+  distance(i: number, j: number): number;
+  /** Необязательно: несколько ближайших кандидатов к цвету (для ускорения чистки больших наборов). */
+  candidates?(L: number, a: number, b: number, k?: number): ArrayLike<number>;
+}
+
 /**
  * Точный поиск ближайшего цвета палитры по CIEDE2000.
  * Палитра отсортирована по L*, поиск идёт от светлоты образца в обе стороны и
  * останавливается, когда нижняя граница |ΔL|/SL превышает лучший найденный ΔE00.
  * Результат совпадает с полным перебором (проверяется в тестах).
  */
-export class PaletteMatcher {
-  /** Lab палитры в исходном порядке: [L, a, b] × n. */
+export class LabMatcher implements ColorSet {
+  /** Lab цветов в исходном порядке: [L, a, b] × n. */
   readonly lab: Float64Array;
   readonly size: number;
-  private readonly order: Int32Array; // индексы палитры, отсортированные по L
+  private readonly order: Int32Array; // индексы, отсортированные по L
   private readonly sortedL: Float64Array;
 
-  constructor(rgbs: ReadonlyArray<readonly [number, number, number]>) {
-    this.size = rgbs.length;
-    this.lab = new Float64Array(this.size * 3);
-    rgbs.forEach((rgb, i) => this.lab.set(rgb8ToLab(rgb), i * 3));
+  constructor(lab: Float64Array) {
+    this.lab = lab;
+    this.size = lab.length / 3;
     const idx = Array.from({ length: this.size }, (_, i) => i);
     idx.sort((a, b) => this.lab[a * 3] - this.lab[b * 3] || a - b);
     this.order = Int32Array.from(idx);
@@ -92,5 +102,14 @@ export class PaletteMatcher {
   distance(i: number, j: number): number {
     const { lab } = this;
     return ciede2000(lab[i * 3], lab[i * 3 + 1], lab[i * 3 + 2], lab[j * 3], lab[j * 3 + 1], lab[j * 3 + 2]);
+  }
+}
+
+/** Точный поиск по палитре ниток, заданной цветами sRGB. */
+export class PaletteMatcher extends LabMatcher {
+  constructor(rgbs: ReadonlyArray<readonly [number, number, number]>) {
+    const lab = new Float64Array(rgbs.length * 3);
+    rgbs.forEach((rgb, i) => lab.set(rgb8ToLab(rgb), i * 3));
+    super(lab);
   }
 }

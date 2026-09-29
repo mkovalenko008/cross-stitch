@@ -68,7 +68,7 @@ describe('OXS', () => {
   const p = testPattern(40, 30);
   const title = 'Тест & <кот> "Мурзик"';
   const xml = buildOxs(p, title);
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '', isArray: (name) => ['palette_item', 'stitch'].includes(name) });
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '', isArray: (name) => ['palette_item', 'stitch', 'blend'].includes(name) });
   const doc = parser.parse(xml).chart;
 
   it('валидный XML', () => {
@@ -92,11 +92,21 @@ describe('OXS', () => {
     expect(items).toHaveLength(p.colors.length + 1);
     expect(items[0].number).toBe('cloth');
     expect(items[0].index).toBe('0');
-    items.slice(1).forEach((it: Record<string, string>, i: number) => {
+    items.slice(1).forEach((it: Record<string, string> & { blend?: Record<string, string>[] }, i: number) => {
       const c = p.colors[i];
       expect(it.index).toBe(String(i + 1));
       expect(it.number).toMatch(/^DMC\s+\S+$/);
-      expect(it.number.split(/\s+/)[1]).toBe(c.code);
+      expect(it.number.split(/\s+/)[1]).toBe(c.parts[0].code);
+      if (c.parts.length > 1) {
+        // смесь: две вложенные нитки по одной
+        expect(it.blend).toHaveLength(2);
+        it.blend!.forEach((b, k) => {
+          expect(b.number).toBe(`DMC ${c.parts[k].code}`);
+          expect(b.strands).toBe('1');
+        });
+      } else {
+        expect(it.blend).toBeUndefined();
+      }
       expect(it.name).toBe(c.name);
       expect(it.color).toMatch(/^[0-9A-F]{6}$/);
       expect(it.color).toBe(c.rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase());

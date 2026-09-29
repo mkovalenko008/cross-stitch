@@ -1,6 +1,7 @@
 import './style.css';
 import { contrastTextIsBlack } from './core/color';
-import { formatInt, formatPercent, sizeCm, skeinsFor } from './core/constants';
+import { formatInt, formatPercent, sizeCm } from './core/constants';
+import { threadUsage } from './core/threads';
 import { TARGET_ACCURACY } from './core/cleanup';
 import type { Pattern } from './core/pattern';
 import { gridHeight, type RgbaImage } from './core/resize';
@@ -31,6 +32,11 @@ const els = {
   sizeHint: $<HTMLParagraphElement>('sizeHint'),
   minStitches: $<HTMLInputElement>('minStitches'),
   minSimilarity: $<HTMLInputElement>('minSimilarity'),
+  blends: $<HTMLInputElement>('blends'),
+  statColorsLabel: $<HTMLElement>('statColorsLabel'),
+  statThreads: $<HTMLElement>('statThreads'),
+  threadsSummary: $<HTMLElement>('threadsSummary'),
+  threadsBody: $<HTMLTableSectionElement>('threadsBody'),
   transparentEmpty: $<HTMLInputElement>('transparentEmpty'),
   go: $<HTMLButtonElement>('go'),
   progress: $<HTMLDivElement>('progress'),
@@ -289,7 +295,11 @@ els.form.addEventListener('submit', async (e) => {
   setProgress(els.progressBar, els.progressStage, 0, 'Начинаю');
   try {
     const res = await call(
-      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity }, palette },
+      {
+        type: 'build',
+        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blends: els.blends.checked },
+        palette,
+      },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
     );
     if (res.type !== 'built') throw new Error('Неожиданный ответ');
@@ -311,11 +321,13 @@ function renderResult(p: Pattern, requestedMin: number) {
   els.resultTitle.textContent = patternTitle;
   els.resultSub.textContent =
     `${p.cols} × ${p.rows} крестиков · ${sizeCm(p.cols)} × ${sizeCm(p.rows)} см на Aida 14 · нитки ${p.paletteTitle} · ` +
-    (p.style === 'smooth' ? 'плавные переходы' : 'ровные пятна');
+    (p.blendColors ? 'со смешанными нитками' : 'обычные нитки');
   els.statAccuracy.textContent = formatPercent(p.accuracy);
   els.statSimilarity.textContent = formatPercent(p.similarity);
   els.statIsolated.textContent = formatPercent(p.isolated);
   els.statColors.textContent = String(p.colors.length);
+  els.statColorsLabel.textContent = p.blendColors ? `Цветов, из них смесей ${p.blendColors}` : 'Цветов';
+  els.statThreads.textContent = String(threadUsage(p).length);
   els.statStitches.textContent = formatInt(p.stitches);
   els.statMin.textContent = String(p.minStitches);
 
@@ -332,8 +344,10 @@ function renderResult(p: Pattern, requestedMin: number) {
   if (p.similarity < p.minSimilarity) {
     notes.push(
       `Сходство ${formatPercent(p.similarity)} — меньше заданных ${Math.round(p.minSimilarity * 100)}%: ` +
-        `в палитре ${p.paletteTitle} нет нужных оттенков, это самый точный вариант. ` +
-        (p.brand === 'DMC' ? 'Попробуйте нитки Гамма — у них больше промежуточных оттенков.' : 'Попробуйте нитки DMC.'),
+        (els.blends.checked
+          ? `в палитре ${p.paletteTitle} нет нужных оттенков даже для смесей, это самый точный вариант. ` +
+            (p.brand === 'DMC' ? 'Попробуйте нитки Гамма.' : 'Попробуйте нитки DMC.')
+          : 'обычными нитками нужные оттенки не передать. Включите «Смешивать две нитки в одном крестике».'),
     );
   }
   els.resultNote.textContent = notes.join(' ');
@@ -377,27 +391,44 @@ function drawPreview(p: Pattern) {
   // экранный размер задаёт CSS: вписать в колонку и в 72% высоты окна с сохранением пропорций
 }
 
-function renderLegend(p: Pattern) {
-  els.legendSummary.textContent = `Цвета и нитки · ${p.colors.length}`;
-  const rows = p.colors.map((c) => {
-    const tr = document.createElement('tr');
-    const sym = document.createElement('span');
-    sym.className = 'sym';
-    sym.textContent = c.symbol;
-    sym.style.background = `rgb(${c.rgb.join(',')})`;
-    sym.style.color = contrastTextIsBlack(c.rgb) ? '#000' : '#fff';
-    const cells = [sym, c.code, c.name || '—', formatInt(c.count), String(skeinsFor(c.count))];
-    const classes = ['', 'code', 'name', 'num', 'num'];
-    cells.forEach((v, i) => {
-      const td = document.createElement('td');
-      if (classes[i]) td.className = classes[i];
-      if (typeof v === 'string') td.textContent = v;
-      else td.append(v);
-      tr.append(td);
-    });
-    return tr;
+function swatch(rgb: readonly number[], text = ''): HTMLSpanElement {
+  const el = document.createElement('span');
+  el.className = 'sym';
+  el.textContent = text;
+  el.style.background = `rgb(${rgb.join(',')})`;
+  el.style.color = contrastTextIsBlack(rgb) ? '#000' : '#fff';
+  return el;
+}
+
+function tableRow(cells: (string | Node)[], classes: string[]): HTMLTableRowElement {
+  const tr = document.createElement('tr');
+  cells.forEach((v, i) => {
+    const td = document.createElement('td');
+    if (classes[i]) td.className = classes[i];
+    if (typeof v === 'string') td.textContent = v;
+    else td.append(v);
+    tr.append(td);
   });
-  els.legendBody.replaceChildren(...rows);
+  return tr;
+}
+
+function renderLegend(p: Pattern) {
+  els.legendSummary.textContent = `Цвета схемы · ${p.colors.length}${p.blendColors ? `, из них смесей ${p.blendColors}` : ''}`;
+  els.legendBody.replaceChildren(
+    ...p.colors.map((c) =>
+      tableRow(
+        [swatch(c.rgb, c.symbol), c.parts.map((x) => x.code).join(' + '), c.name || '—', c.parts.length > 1 ? '1 + 1' : '2', formatInt(c.count)],
+        ['', 'code', 'name', 'num', 'num'],
+      ),
+    ),
+  );
+  const threads = threadUsage(p);
+  els.threadsSummary.textContent = `Нитки к покупке · ${threads.length}`;
+  els.threadsBody.replaceChildren(
+    ...threads.map((u) =>
+      tableRow([swatch(u.rgb), u.code, u.name || '—', formatInt(Math.round(u.stitches)), String(u.skeins)], ['', 'code', 'name', 'num', 'num']),
+    ),
+  );
 }
 
 let resizeTimer = 0;

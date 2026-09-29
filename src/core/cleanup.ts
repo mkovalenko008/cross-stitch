@@ -1,5 +1,7 @@
 import { ciede2000 } from './color';
-import type { PaletteMatcher } from './match';
+import type { ColorSet } from './match';
+
+type Assignment = Int16Array | Int32Array;
 
 /**
  * Чистка редких цветов. Пока в схеме есть цвет, у которого меньше minCount крестиков
@@ -10,14 +12,14 @@ import type { PaletteMatcher } from './match';
  *
  * assignment — индексы палитры по клеткам (-1 = пустая клетка). Возвращает новый массив.
  */
-export function cleanupRareColors(
-  assignment: Int16Array,
+export function cleanupRareColors<T extends Assignment>(
+  assignment: T,
   cellLab: Float32Array | Float64Array,
-  matcher: PaletteMatcher,
+  matcher: ColorSet,
   minCount: number,
   maxColors = Infinity,
-): Int16Array {
-  const out = assignment.slice();
+): T {
+  const out = assignment.slice() as T;
   const pal = matcher.lab;
   const cellsOf: number[][] = Array.from({ length: matcher.size }, () => []);
   for (let i = 0; i < out.length; i++) if (out[i] >= 0) cellsOf[out[i]].push(i);
@@ -37,19 +39,28 @@ export function cleanupRareColors(
     if (rareCount >= minCount && active.size <= maxColors) break;
 
     active.delete(rare);
-    const remaining = [...active];
+    let remaining: number[] | null = null; // полный список — только если быстрые кандидаты не подошли
     for (const cell of cellsOf[rare]) {
       const L = cellLab[cell * 3];
       const a = cellLab[cell * 3 + 1];
       const b = cellLab[cell * 3 + 2];
       let best = -1;
       let bestD = Infinity;
-      for (const c of remaining) {
+      const consider = (c: number) => {
         const d = ciede2000(L, a, b, pal[c * 3], pal[c * 3 + 1], pal[c * 3 + 2]);
         if (d < bestD || (d === bestD && c < best)) {
           bestD = d;
           best = c;
         }
+      };
+      // большие наборы (смеси): сначала ближайшие по Lab кандидаты, оставшиеся в схеме
+      if (matcher.candidates && active.size > 64) {
+        const cand = matcher.candidates(L, a, b, 48);
+        for (let k = 0; k < cand.length; k++) if (active.has(cand[k])) consider(cand[k]);
+      }
+      if (best < 0) {
+        remaining ??= [...active];
+        for (const c of remaining) consider(c);
       }
       out[cell] = best;
       cellsOf[best].push(cell);
@@ -66,7 +77,7 @@ export const ACCURACY_DELTA_E = 2;
  * Точность передачи цвета: доля непустых клеток, у которых итоговая нитка совпадает
  * с эталонной или отличается от неё не больше чем на ΔE2000 = 2.
  */
-export function colorAccuracy(final: Int16Array, reference: Int16Array, matcher: PaletteMatcher): number {
+export function colorAccuracy(final: Assignment, reference: Assignment, matcher: ColorSet): number {
   const cache = new Map<number, boolean>();
   let total = 0;
   let ok = 0;

@@ -16,10 +16,10 @@ const cells = new Int16Array(cols * rows).fill(-1);
 for (let i = 0; i < n * 2; i++) cells[i] = i % n;
 const colors = SYMBOLS.map((symbol, i) => {
   const t = threads[(i * 7) % threads.length];
-  return { code: t.code, name: t.name, rgb: t.rgb, count: 2, symbol };
+  return { code: t.code, name: t.name, rgb: t.rgb, count: 2, symbol, parts: [{ code: t.code, name: t.name, rgb: t.rgb }] };
 });
 const p: Pattern = {
-  cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма', style: 'flat',
+  cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма', style: 'flat', blendColors: 0,
   accuracy: 1, similarity: 1, minSimilarity: 0, isolated: 0, minStitches: 2, referenceColors: n, stitches: n * 2,
 };
 const fonts = {

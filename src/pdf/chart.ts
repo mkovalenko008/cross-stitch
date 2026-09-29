@@ -1,6 +1,7 @@
 import type { jsPDF } from 'jspdf';
 import { formatInt, formatPercent, sizeCm } from '../core/constants';
 import type { Pattern } from '../core/pattern';
+import { threadUsage } from '../core/threads';
 import { FONT, PAGE_H, PAGE_W, PT_PER_MM, createDoc, docToBytes, glyphPlacement, pageFooter, previewPng, symbolTextRgb, type PdfFonts } from './common';
 import { chartLayout, type Chunk } from './layout';
 
@@ -77,10 +78,10 @@ function drawCover(
   const info: [string, string][] = [
     ['Размер', `${p.cols} × ${p.rows} крестиков`],
     ['На канве Aida 14', `${sizeCm(p.cols)} × ${sizeCm(p.rows)} см`],
-    ['Цветов', String(p.colors.length)],
+    ['Цветов', p.blendColors ? `${p.colors.length} (смесей двух ниток ${p.blendColors})` : String(p.colors.length)],
+    ['Ниток к покупке', String(threadUsage(p).length)],
     ['Крестиков', formatInt(p.stitches)],
     ['Нитки', p.paletteTitle === p.brand ? p.brand : `${p.paletteTitle} (${p.brand})`],
-    ['Рисунок', p.style === 'smooth' ? 'плавные переходы' : 'ровные пятна'],
     ['Сходство с фото', formatPercent(p.similarity)],
     ['Точность передачи цвета', formatPercent(p.accuracy)],
   ];
