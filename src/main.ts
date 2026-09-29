@@ -34,6 +34,8 @@ const els = {
   minSimilarity: $<HTMLInputElement>('minSimilarity'),
   statColorsLabel: $<HTMLElement>('statColorsLabel'),
   statThreads: $<HTMLElement>('statThreads'),
+  statThreadsLabel: $<HTMLElement>('statThreadsLabel'),
+  maxThreads: $<HTMLInputElement>('maxThreads'),
   threadsSummary: $<HTMLElement>('threadsSummary'),
   threadsBody: $<HTMLTableSectionElement>('threadsBody'),
   transparentEmpty: $<HTMLInputElement>('transparentEmpty'),
@@ -260,6 +262,9 @@ els.minSimilarity.addEventListener('blur', () => {
   const v = Math.round(Number(els.minSimilarity.value));
   els.minSimilarity.value = String(Number.isFinite(v) && els.minSimilarity.value !== '' ? Math.min(99, Math.max(0, v)) : 85);
 });
+els.maxThreads.addEventListener('focus', () => {
+  (document.querySelector('input[name=economy][value=max]') as HTMLInputElement).checked = true;
+});
 els.minStitches.addEventListener('blur', () => {
   const v = Math.round(Number(els.minStitches.value));
   els.minStitches.value = String(Number.isFinite(v) ? Math.min(100, Math.max(2, v)) : 10);
@@ -284,6 +289,16 @@ els.form.addEventListener('submit', async (e) => {
   const rows = gridHeight(cols, source.width, source.height);
   const palette = (new FormData(els.form).get('palette') as PaletteId) ?? 'dmc';
   const blendMode = (new FormData(els.form).get('blendMode') as BlendMode) ?? 'rare';
+  const economyChoice = (new FormData(els.form).get('economy') as string) ?? 'normal';
+  const maxThreadsValue = Math.min(500, Math.max(8, Math.round(Number(els.maxThreads.value)) || 60));
+  const economy =
+    economyChoice === 'none'
+      ? { threadEconomy: 0 }
+      : economyChoice === 'strong'
+        ? { threadEconomy: 0.03 }
+        : economyChoice === 'max'
+          ? { threadEconomy: 0, maxThreads: maxThreadsValue }
+          : { threadEconomy: 0.01 };
   const minStitches = Math.max(2, Math.round(Number(els.minStitches.value)) || 10);
   const simValue = Math.round(Number(els.minSimilarity.value));
   const minSimilarity = (els.minSimilarity.value === '' || !Number.isFinite(simValue) ? 85 : Math.min(99, Math.max(0, simValue))) / 100;
@@ -297,7 +312,7 @@ els.form.addEventListener('submit', async (e) => {
     const res = await call(
       {
         type: 'build',
-        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blendMode },
+        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blendMode, ...economy },
         palette,
       },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
@@ -329,7 +344,10 @@ function renderResult(p: Pattern, requestedMin: number) {
   els.statColorsLabel.textContent = p.blendColors
     ? `Цветов, из них смесей ${p.blendColors} (${formatPercent(p.blendShare)} крестиков)`
     : 'Цветов';
-  els.statThreads.textContent = String(threadUsage(p).length);
+  const nThreads = threadUsage(p).length;
+  els.statThreads.textContent = String(nThreads);
+  els.statThreadsLabel.textContent =
+    p.threadsBeforeEconomy && p.threadsBeforeEconomy > nThreads ? `Ниток к покупке (без экономии ${p.threadsBeforeEconomy})` : 'Ниток к покупке';
   els.statStitches.textContent = formatInt(p.stitches);
   els.statMin.textContent = String(p.minStitches);
 

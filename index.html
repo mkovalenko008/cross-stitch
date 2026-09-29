@@ -101,6 +101,30 @@
             </fieldset>
 
             <fieldset class="field">
+              <legend class="field__label">Ниток к покупке</legend>
+              <div class="radio-list">
+                <label class="check">
+                  <input type="radio" name="economy" value="normal" checked />
+                  <span><b>Экономно</b> — убрать редкие нитки, уступив в сходстве не больше 1%</span>
+                </label>
+                <label class="check">
+                  <input type="radio" name="economy" value="strong" />
+                  <span><b>Сильная экономия</b> — уступить в сходстве до 3%</span>
+                </label>
+                <label class="check check--inline">
+                  <input type="radio" name="economy" value="max" />
+                  <span><b>Не больше</b></span>
+                  <input class="input input--tiny" id="maxThreads" type="number" inputmode="numeric" min="8" max="500" step="1" value="60" aria-label="Не больше стольких ниток" />
+                  <span>ниток</span>
+                </label>
+                <label class="check">
+                  <input type="radio" name="economy" value="none" />
+                  <span><b>Без экономии</b> — все нитки, какие нужны</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="field">
               <legend class="field__label">Нитки</legend>
               <div class="choice">
                 <label class="choice__item">
@@ -156,7 +180,7 @@
           <div class="stats__item"><dt>Сходство с фото</dt><dd id="statSimilarity"></dd></div>
           <div class="stats__item"><dt>Точность передачи цвета</dt><dd id="statAccuracy"></dd></div>
           <div class="stats__item"><dt id="statColorsLabel">Цветов</dt><dd id="statColors"></dd></div>
-          <div class="stats__item"><dt>Ниток к покупке</dt><dd id="statThreads"></dd></div>
+          <div class="stats__item"><dt id="statThreadsLabel">Ниток к покупке</dt><dd id="statThreads"></dd></div>
           <div class="stats__item"><dt>Крестиков</dt><dd id="statStitches"></dd></div>
           <div class="stats__item"><dt>Минимум крестиков на цвет</dt><dd id="statMin"></dd></div>
           <div class="stats__item"><dt>Одиночных крестиков</dt><dd id="statIsolated"></dd></div>

@@ -204,7 +204,7 @@ describe('сборка схемы', () => {
   it('при точности < 99,9% минимум уменьшается, но не ниже 2', () => {
     // шум: много цветов, почти все редкие
     const img = image(80, 80, () => [Math.floor(rnd() * 256), Math.floor(rnd() * 256), Math.floor(rnd() * 256), 255]);
-    const p = buildPattern(img, { cols: 80, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0 }, PALETTES.gamma);
+    const p = buildPattern(img, { cols: 80, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0, threadEconomy: 0 }, PALETTES.gamma);
     expect(p.minStitches).toBeGreaterThanOrEqual(2);
     expect(p.minStitches).toBeLessThan(10);
     for (const c of p.colors) expect(c.count).toBeGreaterThanOrEqual(2);
@@ -300,7 +300,7 @@ describe('смеси ниток (по одной нитке двух цвето�
   });
 
   it('градиент между нитками: без смесей сходство низкое, «сколько нужно» — не ниже 85%', () => {
-    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 };
+    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, threadEconomy: 0 };
     const plain = buildPattern(gradient(), { ...opts, blendMode: 'none' }, PALETTES.dmc);
     const mixed = buildPattern(gradient(), { ...opts, blendMode: 'needed' }, PALETTES.dmc);
     expect(plain.style).toBe('flat');
@@ -320,7 +320,7 @@ describe('смеси ниток (по одной нитке двух цвето�
   });
 
   it('«в исключительных случаях»: смесей немного, основа — обычные нитки', () => {
-    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85 };
+    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, threadEconomy: 0 };
     const rare = buildPattern(gradient(), { ...opts, blendMode: 'rare' }, PALETTES.dmc);
     const plain = buildPattern(gradient(), { ...opts, blendMode: 'none' }, PALETTES.dmc);
     expect(rare.blendColors).toBeGreaterThan(0);
@@ -345,8 +345,27 @@ describe('смеси ниток (по одной нитке двух цвето�
     expect(p.isolated).toBe(0);
   });
 
+  it('экономия ниток: меньше ниток, сходство почти то же; предел «не больше N» соблюдается', () => {
+    const photo = image(240, 160, (x, y) => [
+      Math.round(128 + 100 * Math.sin(x / 17) * Math.cos(y / 23)),
+      Math.round(110 + 80 * Math.cos(x / 29 + y / 31)),
+      Math.round(140 + 90 * Math.sin((x + y) / 37)),
+      255,
+    ]);
+    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed' as const };
+    const all = buildPattern(photo, { ...opts, threadEconomy: 0 }, PALETTES.dmc);
+    const eco = buildPattern(photo, { ...opts, threadEconomy: 0.01 }, PALETTES.dmc);
+    const cap = buildPattern(photo, { ...opts, threadEconomy: 0, maxThreads: 25 }, PALETTES.dmc);
+    const nAll = threadUsage(all).length;
+    expect(all.threadsBeforeEconomy).toBeUndefined();
+    expect(eco.threadsBeforeEconomy).toBe(nAll);
+    expect(threadUsage(eco).length).toBeLessThan(nAll);
+    expect(eco.similarity).toBeGreaterThan(all.similarity - 0.025);
+    expect(threadUsage(cap).length).toBeLessThanOrEqual(25);
+  }, 60_000);
+
   it('нитки к покупке: крестик смеси — по половине на каждую нитку', () => {
-    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed' }, PALETTES.dmc);
+    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed', threadEconomy: 0 }, PALETTES.dmc);
     expect(p.blendColors).toBeGreaterThan(0);
     const usage = threadUsage(p);
     const total = usage.reduce((s, u) => s + u.stitches, 0);
