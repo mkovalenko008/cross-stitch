@@ -47,21 +47,37 @@ const Q_TO_LIN = (() => {
 })();
 
 /**
+ * Кэш «оттенок (7 бит на канал) → ближайшая нитка» для одной палитры. Не зависит от настроек
+ * дизеринга, поэтому его можно передавать в несколько вызовов ditherAssign подряд.
+ */
+export function createNearestCache(): Int16Array {
+  return new Int16Array(Q_LEVELS * Q_LEVELS * Q_LEVELS).fill(-1);
+}
+
+/**
  * Рассеивание ошибки Флойда–Стейнберга в линейном RGB, змейкой (чётные строки слева направо,
  * нечётные — справа налево), ближайшая нитка — по CIEDE2000. Пустые клетки пропускаются,
  * ошибка в них не переносится.
+ *
+ * runDelta > 0 — отрезки от двух крестиков: если в строке начинается новый цвет и сверху
+ * нет такого же, следующая клетка берёт тот же цвет, когда он хуже лучшей нитки для неё
+ * не больше чем на runDelta (ΔE2000). Ошибка при этом переносится на соседей как обычно,
+ * поэтому средний цвет сохраняется, а одиночных крестиков становится намного меньше.
+ * runDelta = Infinity — отрезок продлевается всегда, 0 — обычный дизеринг.
  */
 export function ditherAssign(
   grid: GridColors,
   matcher: PaletteMatcher,
   pal: Float32Array,
+  runDelta = 0,
   onProgress?: (fraction: number) => void,
+  cache: Int16Array = createNearestCache(),
 ): Int16Array {
   const { cols, rows, lin, empty } = grid;
   const err = new Float32Array(lin);
   const out = new Int16Array(cols * rows).fill(-1);
-  const cache = new Int16Array(Q_LEVELS * Q_LEVELS * Q_LEVELS).fill(-1);
   const lab = new Float64Array(3);
+  const pl = matcher.lab;
   const W1 = 7 / 16;
   const W2 = 3 / 16;
   const W3 = 5 / 16;
@@ -71,10 +87,14 @@ export function ditherAssign(
     const ltr = (y & 1) === 0;
     const dir = ltr ? 1 : -1;
     const hasNext = y + 1 < rows;
+    let force = -1; // цвет, которым надо продлить начатый отрезок
     for (let s = 0; s < cols; s++) {
       const x = ltr ? s : cols - 1 - s;
       const i = y * cols + x;
-      if (empty[i]) continue;
+      if (empty[i]) {
+        force = -1;
+        continue;
+      }
       const r = clamp01(err[i * 3]);
       const g = clamp01(err[i * 3 + 1]);
       const b = clamp01(err[i * 3 + 2]);
@@ -87,6 +107,22 @@ export function ditherAssign(
         linearRgbToLab(Q_TO_LIN[qr], Q_TO_LIN[qg], Q_TO_LIN[qb], lab);
         t = matcher.nearest(lab[0], lab[1], lab[2]);
         cache[key] = t;
+      }
+      if (force >= 0) {
+        if (force !== t) {
+          linearRgbToLab(r, g, b, lab);
+          const dBest = ciede2000(lab[0], lab[1], lab[2], pl[t * 3], pl[t * 3 + 1], pl[t * 3 + 2]);
+          const dForce = ciede2000(lab[0], lab[1], lab[2], pl[force * 3], pl[force * 3 + 1], pl[force * 3 + 2]);
+          if (dForce <= dBest + runDelta) t = force;
+        }
+        force = -1;
+      } else if (runDelta > 0) {
+        // начинается новый отрезок? (цвет не как у предыдущей клетки в строке и не как сверху)
+        const xp = x - dir;
+        const prev = xp >= 0 && xp < cols ? out[i - dir] : -1;
+        const up = y > 0 ? out[i - cols] : -1;
+        const xn = x + dir;
+        if (t !== prev && t !== up && xn >= 0 && xn < cols && !empty[i + dir]) force = t;
       }
       out[i] = t;
       const er = r - pal[t * 3];

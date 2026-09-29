@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ACCURACY_DELTA_E, TARGET_ACCURACY, cleanupRareColors, colorAccuracy, minLadder } from '../src/core/cleanup';
 import { despeckle, ditherAssign, farSimilarity, isolatedShare, threadsLinear } from '../src/core/dither';
-import { rgb8ToLab } from '../src/core/color';
+import { SRGB_TO_LINEAR, linearToSrgb8, rgb8ToLab } from '../src/core/color';
 import { PaletteMatcher } from '../src/core/match';
-import { buildPattern } from '../src/core/pattern';
+import { SMOOTH_LEVELS, buildPattern } from '../src/core/pattern';
 import { gridHeight, resizeToGrid } from '../src/core/resize';
 import { PALETTES } from '../src/palettes';
 
@@ -207,8 +207,16 @@ describe('сборка схемы', () => {
 });
 
 describe('стиль «Как на фото»', () => {
+  // Плавный переход между цветами четырёх ниток DMC (в линейном RGB): такие оттенки палитра
+  // в принципе может собрать смесью крестиков. Насыщенные цвета вне ниток сюда не годятся.
+  const corners = ['3865', '3750', '355', '3347'].map((code) => PALETTES.dmc.threads.find((t) => t.code === code)!.rgb);
   const gradient = () =>
-    image(240, 160, (x, y) => [Math.round((x / 239) * 255), Math.round((y / 159) * 200), 90 + Math.round((x / 239) * 60), 255]);
+    image(240, 160, (x, y) => {
+      const u = x / 239;
+      const v = y / 159;
+      const w = [(1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v];
+      return [0, 1, 2].map((ch) => linearToSrgb8(w.reduce((sum, wk, k) => sum + wk * SRGB_TO_LINEAR[corners[k][ch]], 0))).concat(255);
+    });
 
   it('дизеринг использует только нитки палитры, пустые клетки остаются пустыми', () => {
     const img = image(60, 40, (x, y) => (x < 10 && y < 10 ? [0, 0, 0, 0] : [(x * 4) % 256, (y * 6) % 256, 120, 255]));
@@ -242,6 +250,31 @@ describe('стиль «Как на фото»', () => {
     for (const c of smooth.colors) expect(c.count).toBeGreaterThanOrEqual(smooth.minStitches);
     expect(smooth.isolated).toBeLessThan(0.1);
     expect(smooth.accuracy).toBeGreaterThanOrEqual(0.999);
+  });
+
+  it('отрезки от двух крестиков: одиночных почти нет', () => {
+    const grid = resizeToGrid(gradient(), 120, 80, true);
+    const threads = PALETTES.dmc.threads;
+    const m = new PaletteMatcher(threads.map((t) => t.rgb));
+    const pal = threadsLinear(threads.map((t) => t.rgb));
+    const plain = ditherAssign(grid, m, pal, 0);
+    const runs = ditherAssign(grid, m, pal, Infinity);
+    expect(isolatedShare(runs, 120, 80)).toBeLessThan(0.01);
+    expect(isolatedShare(plain, 120, 80)).toBeGreaterThan(0.2);
+  });
+
+  it('сходство с фото не ниже заданного (85%), если палитра позволяет', () => {
+    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, style: 'smooth', minSimilarity: 0.85 }, PALETTES.dmc);
+    expect(p.similarity).toBeGreaterThanOrEqual(0.85);
+    expect(p.minSimilarity).toBe(0.85);
+    // более высокий порог не даёт схему хуже по сходству
+    const strict = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, style: 'smooth', minSimilarity: 0.95 }, PALETTES.dmc);
+    expect(strict.similarity).toBeGreaterThanOrEqual(p.similarity - 0.005);
+  });
+
+  it('уровни «Как на фото» идут от чистого к точному', () => {
+    expect(SMOOTH_LEVELS[0].run).toBe(Infinity);
+    expect(SMOOTH_LEVELS[SMOOTH_LEVELS.length - 1]).toEqual({ run: 0 });
   });
 
   it('сходство с фото: одинаковая картинка — 100%', () => {

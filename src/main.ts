@@ -30,6 +30,7 @@ const els = {
   heightOut: $<HTMLOutputElement>('heightOut'),
   sizeHint: $<HTMLParagraphElement>('sizeHint'),
   minStitches: $<HTMLInputElement>('minStitches'),
+  minSimilarity: $<HTMLInputElement>('minSimilarity'),
   transparentEmpty: $<HTMLInputElement>('transparentEmpty'),
   go: $<HTMLButtonElement>('go'),
   progress: $<HTMLDivElement>('progress'),
@@ -250,6 +251,10 @@ els.width.addEventListener('blur', () => {
   if (Number.isFinite(v) && els.width.value !== '') els.width.value = String(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, v)));
   updateSize();
 });
+els.minSimilarity.addEventListener('blur', () => {
+  const v = Math.round(Number(els.minSimilarity.value));
+  els.minSimilarity.value = String(Number.isFinite(v) && els.minSimilarity.value !== '' ? Math.min(99, Math.max(50, v)) : 85);
+});
 els.minStitches.addEventListener('blur', () => {
   const v = Math.round(Number(els.minStitches.value));
   els.minStitches.value = String(Number.isFinite(v) ? Math.min(100, Math.max(2, v)) : 10);
@@ -275,6 +280,7 @@ els.form.addEventListener('submit', async (e) => {
   const palette = (new FormData(els.form).get('palette') as PaletteId) ?? 'dmc';
   const style = (new FormData(els.form).get('style') as PatternStyle) ?? 'smooth';
   const minStitches = Math.max(2, Math.round(Number(els.minStitches.value)) || 10);
+  const minSimilarity = Math.min(99, Math.max(50, Math.round(Number(els.minSimilarity.value)) || 85)) / 100;
 
   busy = true;
   els.go.disabled = true;
@@ -283,7 +289,7 @@ els.form.addEventListener('submit', async (e) => {
   setProgress(els.progressBar, els.progressStage, 0, 'Начинаю');
   try {
     const res = await call(
-      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, style }, palette },
+      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, style, minSimilarity }, palette },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
     );
     if (res.type !== 'built') throw new Error('Неожиданный ответ');
@@ -322,6 +328,16 @@ function renderResult(p: Pattern, requestedMin: number) {
       `Точность ниже 99,9% даже при минимуме ${p.minStitches} крестика на цвет: в картинке много мелких редких цветов. ` +
         `Помогут бо́льшая ширина или картинка с более крупными деталями.`,
     );
+  }
+  if (p.style === 'smooth' && p.minSimilarity !== undefined && p.similarity < p.minSimilarity) {
+    notes.push(
+      `Сходство ${formatPercent(p.similarity)} — меньше заданных ${Math.round(p.minSimilarity * 100)}%: ` +
+        `в палитре ${p.paletteTitle} нет нужных оттенков, это самый точный вариант. ` +
+        (p.brand === 'DMC' ? 'Попробуйте нитки Гамма — у них больше промежуточных оттенков.' : 'Попробуйте нитки DMC.'),
+    );
+  }
+  if (p.style === 'flat' && p.similarity < 0.85) {
+    notes.push('В стиле «Ровные пятна» оттенки между нитками теряются. Для сходства от 85% выберите «Как на фото».');
   }
   els.resultNote.textContent = notes.join(' ');
   els.resultNote.hidden = notes.length === 0;
