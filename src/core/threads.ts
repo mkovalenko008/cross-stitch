@@ -3,8 +3,8 @@ import type { Pattern, ThreadRef } from './pattern';
 
 export interface ThreadUsage extends ThreadRef {
   /**
-   * Расход в «полных крестиках»: крестик одной ниткой в 2 сложения — 1, крестик смеси
-   * (по одной нитке двух цветов) — по ½ на каждую нитку.
+   * Расход в полных крестиках: крестик обычной ниткой — 1, крестик смеси — доля по числу нитей
+   * (1 + 1 — по ½, 2 + 1 — ⅔ и ⅓).
    */
   stitches: number;
   skeins: number;
@@ -16,18 +16,17 @@ export interface ThreadUsage extends ThreadRef {
 export function threadUsage(p: Pattern): ThreadUsage[] {
   const map = new Map<string, ThreadUsage>();
   for (const c of p.colors) {
-    const share = c.count / c.parts.length;
     for (const part of c.parts) {
       let u = map.get(part.code);
       if (!u) {
-        u = { ...part, stitches: 0, skeins: 0, usedIn: 0 };
+        u = { code: part.code, name: part.name, rgb: part.rgb, stitches: 0, skeins: 0, usedIn: 0 };
         map.set(part.code, u);
       }
-      u.stitches += share;
+      u.stitches += (c.count * part.strands) / p.strands;
       u.usedIn++;
     }
   }
   const list = [...map.values()];
-  for (const u of list) u.skeins = skeinsFor(Math.ceil(u.stitches));
+  for (const u of list) u.skeins = skeinsFor(u.stitches, p.strands);
   return list.sort((a, b) => b.stitches - a.stitches || a.code.localeCompare(b.code));
 }

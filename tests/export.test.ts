@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { unzlibSync } from 'fflate';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { describe, expect, it } from 'vitest';
-import { STITCHES_PER_SKEIN, skeinsFor } from '../src/core/constants';
+import { STITCHES_PER_SKEIN, THREAD_RESERVE, skeinsFor, stitchesPerSkein } from '../src/core/constants';
 import { buildPattern, type Pattern } from '../src/core/pattern';
 import { buildOxs } from '../src/export/oxs';
 import { PALETTES } from '../src/palettes';
@@ -33,12 +33,22 @@ function testPattern(cols: number, rows: number, withHoles = true): Pattern {
 }
 
 describe('пасмы', () => {
-  it('1 пасма на 1800 крестиков, округление вверх, минимум 1', () => {
+  it('1 пасма ≈ 1800 крестиков в 2 нити, запас 5%, округление вверх, минимум 1', () => {
     expect(STITCHES_PER_SKEIN).toBe(1800);
+    expect(THREAD_RESERVE).toBe(0.05);
     expect(skeinsFor(1)).toBe(1);
-    expect(skeinsFor(1800)).toBe(1);
-    expect(skeinsFor(1801)).toBe(2);
-    expect(skeinsFor(5400)).toBe(3);
+    expect(skeinsFor(1714)).toBe(1); // 1714 × 1,05 = 1799,7 — ещё влезает в одну пасму
+    expect(skeinsFor(1715)).toBe(2);
+    expect(skeinsFor(5400)).toBe(4); // 5400 × 1,05 = 5670 → 3,15 пасмы
+  });
+
+  it('при 3 нитях в игле из пасмы выходит в полтора раза меньше крестиков', () => {
+    expect(stitchesPerSkein(2)).toBe(1800);
+    expect(stitchesPerSkein(3)).toBe(1200);
+    expect(skeinsFor(1142, 3)).toBe(1); // 1142 × 1,05 = 1199,1 из 1200
+    expect(skeinsFor(1143, 3)).toBe(2);
+    expect(skeinsFor(3600, 3)).toBe(4); // 3600 × 1,05 = 3780 → 3,15 пасмы
+    expect(skeinsFor(2400 / 1.05, 3)).toBe(2); // ровно 2 пасмы — без лишней из-за погрешности
   });
 });
 
@@ -87,7 +97,7 @@ describe('OXS', () => {
     expect(Number(props.palettecount)).toBe(p.colors.length);
   });
 
-  it('палитра: 0 — ткань, дальше нитки с номером, названием, цветом, символом, strands=2', () => {
+  it('палитра: 0 — ткань, дальше нитки с номером, названием, цветом, символом и числом нитей', () => {
     const items = doc.palette.palette_item;
     expect(items).toHaveLength(p.colors.length + 1);
     expect(items[0].number).toBe('cloth');
@@ -98,19 +108,20 @@ describe('OXS', () => {
       expect(it.number).toMatch(/^DMC\s+\S+$/);
       expect(it.number.split(/\s+/)[1]).toBe(c.parts[0].code);
       if (c.parts.length > 1) {
-        // смесь: две вложенные нитки по одной
+        // смесь: две вложенные нитки, у каждой — сколько её нитей в игле (вместе — все нити)
         expect(it.blend).toHaveLength(2);
         it.blend!.forEach((b, k) => {
           expect(b.number).toBe(`DMC ${c.parts[k].code}`);
-          expect(b.strands).toBe('1');
+          expect(b.strands).toBe(String(c.parts[k].strands));
         });
+        expect(c.parts.reduce((sum, part) => sum + part.strands, 0)).toBe(p.strands);
       } else {
         expect(it.blend).toBeUndefined();
       }
       expect(it.name).toBe(c.name);
       expect(it.color).toMatch(/^[0-9A-F]{6}$/);
       expect(it.color).toBe(c.rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase());
-      expect(it.strands).toBe('2');
+      expect(it.strands).toBe(String(p.strands));
       expect(String.fromCodePoint(Number(it.symbol))).toBe(c.symbol);
     });
   });

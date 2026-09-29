@@ -1,5 +1,5 @@
 import type { jsPDF } from 'jspdf';
-import { STITCHES_PER_SKEIN, formatInt, sizeCm } from '../core/constants';
+import { THREAD_RESERVE, formatInt, sizeCm, stitchesPerSkein } from '../core/constants';
 import type { Pattern } from '../core/pattern';
 import { threadUsage } from '../core/threads';
 import { FONT, PAGE_H, createDoc, docToBytes, drawSymbol, pageFooter, setFill, symbolTextRgb, type PdfFonts } from './common';
@@ -75,12 +75,17 @@ export function buildColorsPdf(pattern: Pattern, title: string, fonts: PdfFonts)
   doc.setFont(FONT, 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(80, 80, 80);
-  const blendNote = pattern.blendColors
-    ? ` «1 + 1» — смесь: в иглу по одной нитке двух цветов, крестик шьётся как обычно.`
+  // пояснение к смесям — на примере первой смеси схемы: «1 + 2» у 939 + 3371 — одна нить 939 и две нити 3371
+  const ex = pattern.colors.find((c) => c.parts.length > 1);
+  const blendNote = ex
+    ? ` Смесь — нити двух цветов в одной игле: «${ex.parts.map((x) => x.strands).join(' + ')}» у ${ex.parts.map((x) => x.code).join(' + ')} — ` +
+      `это ${strandWord(ex.parts[0].strands)} ${ex.parts[0].code} и ${strandWord(ex.parts[1].strands)} ${ex.parts[1].code}; крестик шьётся как обычно.`
     : '';
+  const perSkein = stitchesPerSkein(pattern.strands);
   const intro = doc.splitTextToSize(
     `Нитки ${pattern.paletteTitle} · ${pattern.cols} × ${pattern.rows} крестиков (${sizeCm(pattern.cols)} × ${sizeCm(pattern.rows)} см на Aida 14) · ` +
-      `2 сложения, пасмы — из расчёта ${formatInt(STITCHES_PER_SKEIN)} крестиков на пасму.${blendNote}`,
+      `${pattern.strands} нити в игле, пасмы — из расчёта ${formatInt(perSkein)} крестиков на пасму, ` +
+        `с запасом ${Math.round(THREAD_RESERVE * 100)}% на обрезки.${blendNote}`,
     WIDTH,
   ) as string[];
   doc.text(intro, LEFT, 25);
@@ -118,7 +123,7 @@ export function buildColorsPdf(pattern: Pattern, title: string, fonts: PdfFonts)
     cellText(doc, c.name || '—', x, mid, COLOR_COLS[3].w, 8);
     x += COLOR_COLS[3].w;
     doc.setFontSize(8.5);
-    doc.text(c.parts.length > 1 ? '1 + 1' : '2', x + COLOR_COLS[4].w / 2, mid, { align: 'center', baseline: 'middle' });
+    doc.text(c.parts.map((part) => part.strands).join(' + '), x + COLOR_COLS[4].w / 2, mid, { align: 'center', baseline: 'middle' });
     x += COLOR_COLS[4].w;
     doc.setFontSize(9);
     doc.text(formatInt(c.count), x + COLOR_COLS[5].w - 2, mid, { align: 'right', baseline: 'middle' });
@@ -163,6 +168,7 @@ export function buildColorsPdf(pattern: Pattern, title: string, fonts: PdfFonts)
     ['Ниток к покупке', String(threads.length)],
     ['Всего крестиков', formatInt(pattern.stitches)],
     ['Всего пасм', String(skeins)],
+    ['Нитей в игле', String(pattern.strands)],
     ['Производитель', pattern.paletteTitle === pattern.brand ? pattern.brand : `${pattern.paletteTitle} (${pattern.brand})`],
   ];
   pager.y += 6;
@@ -189,6 +195,10 @@ export function buildColorsPdf(pattern: Pattern, title: string, fonts: PdfFonts)
     pageFooter(doc, pno, total, `${title} — цвета`);
   }
   return docToBytes(doc);
+}
+
+function strandWord(n: number): string {
+  return n === 1 ? 'одна нить' : n === 2 ? 'две нити' : `${n} нити`;
 }
 
 function section(doc: jsPDF, pager: Pager, text: string): void {

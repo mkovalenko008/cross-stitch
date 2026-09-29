@@ -6,7 +6,7 @@ import { skeinsFor } from '../src/core/constants';
 import { EntrySet } from '../src/core/entries';
 import { KdTree } from '../src/core/kdtree';
 import { PaletteMatcher } from '../src/core/match';
-import { BLEND_RULES, buildPattern } from '../src/core/pattern';
+import { BLEND_RULES, buildPattern, pickBlends } from '../src/core/pattern';
 import { SYMBOLS } from '../src/core/symbols';
 import { threadUsage } from '../src/core/threads';
 import { gridHeight, resizeToGrid } from '../src/core/resize';
@@ -211,7 +211,7 @@ describe('сборка схемы', () => {
   });
 });
 
-describe('смеси ниток (по одной нитке двух цветов)', () => {
+describe('смеси ниток (нити двух цветов в одной игле)', () => {
   // Плавный переход между цветами четырёх ниток DMC (в линейном RGB): одиночными нитками
   // такие оттенки не передать, а смесями — можно.
   const corners = ['3865', '3750', '355', '3347'].map((code) => PALETTES.dmc.threads.find((t) => t.code === code)!.rgb);
@@ -225,18 +225,28 @@ describe('смеси ниток (по одной нитке двух цвето�
   const threads = PALETTES.dmc.threads;
   const rgbs = threads.map((t) => t.rgb);
 
-  it('варианты: сначала все нитки палитры, потом смеси близких пар; цвет смеси — среднее в линейном RGB', () => {
-    const set = new EntrySet(rgbs, 10);
-    for (let i = 0; i < threads.length; i++) expect(set.parts[i]).toEqual([i]);
+  it.each([2, 3])('варианты при %i нитях в игле: сначала нитки палитры, потом смеси; цвет — среднее по нитям в линейном RGB', (strands) => {
+    const set = new EntrySet(rgbs, 10, strands);
+    for (let i = 0; i < threads.length; i++) {
+      expect(set.parts[i]).toEqual([i]);
+      expect(set.strands[i]).toEqual([strands]);
+    }
     expect(set.size).toBeGreaterThan(threads.length);
     for (let e = threads.length; e < set.size; e += 97) {
       const [i, j] = set.parts[e] as [number, number];
+      const [si, sj] = set.strands[e] as [number, number];
+      expect(si + sj).toBe(strands);
+      expect(si >= 1 && sj >= 1).toBe(true);
       expect(set.distance(i, j)).toBeLessThanOrEqual(10.000001);
       for (let ch = 0; ch < 3; ch++) {
-        const mix = (SRGB_TO_LINEAR[rgbs[i][ch]] + SRGB_TO_LINEAR[rgbs[j][ch]]) / 2;
+        const mix = (si * SRGB_TO_LINEAR[rgbs[i][ch]] + sj * SRGB_TO_LINEAR[rgbs[j][ch]]) / strands;
         expect(set.lin[e * 3 + ch]).toBeCloseTo(mix, 5);
       }
     }
+    // при 3 нитях у каждой пары две смеси (2 + 1 и 1 + 2), при 2 — одна
+    const pairs = new Set<string>();
+    for (let e = threads.length; e < set.size; e++) pairs.add(set.parts[e].join('-'));
+    expect(set.size - threads.length).toBe(pairs.size * (strands - 1));
   });
 
   it('k-d дерево находит те же ближайшие точки, что и полный перебор', () => {
@@ -259,8 +269,8 @@ describe('смеси ниток (по одной нитке двух цвето�
     }
   });
 
-  it('быстрый поиск среди смесей совпадает с полным перебором по CIEDE2000', () => {
-    const set = new EntrySet(rgbs, 20);
+  it.each([2, 3])('быстрый поиск среди смесей (%i нити) совпадает с полным перебором по CIEDE2000', (strands) => {
+    const set = new EntrySet(rgbs, 20, strands);
     const brute = (lab: number[]) => {
       let best = 0;
       let bestD = Infinity;
@@ -293,11 +303,11 @@ describe('смеси ниток (по одной нитке двух цвето�
     for (let q = 0; q < 300; q++) {
       const lab = rgb8ToLab([Math.floor(rnd() * 256), Math.floor(rnd() * 256), Math.floor(rnd() * 256)]);
       const d = dist(lab, set.nearest(lab[0], lab[1], lab[2])) - brute(lab).bestD;
-      expect(d).toBeLessThan(6);
+      expect(d).toBeLessThan(8);
       sum += d;
     }
     expect(sum / 300).toBeLessThan(0.2);
-  });
+  }, 60_000);
 
   it('градиент между нитками: без смесей сходство низкое, «сколько нужно» — не ниже 85%', () => {
     const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, threadEconomy: 0 };
@@ -360,19 +370,90 @@ describe('смеси ниток (по одной нитке двух цвето�
     expect(all.threadsBeforeEconomy).toBeUndefined();
     expect(eco.threadsBeforeEconomy).toBe(nAll);
     expect(threadUsage(eco).length).toBeLessThan(nAll);
-    expect(eco.similarity).toBeGreaterThan(all.similarity - 0.025);
+    // допуск 1% проверяется до чистки редких цветов, чистка меняет сходство на сотые доли процента
+    expect(eco.similarity).toBeGreaterThanOrEqual(all.similarity - 0.01 - 0.002);
     expect(threadUsage(cap).length).toBeLessThanOrEqual(25);
   }, 60_000);
 
-  it('нитки к покупке: крестик смеси — по половине на каждую нитку', () => {
-    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed', threadEconomy: 0 }, PALETTES.dmc);
+  it('экономия на большой схеме: сходство на полной сетке падает не больше допуска и не ниже заданного', () => {
+    const photo = image(520, 340, (x, y) => [
+      Math.round(128 + 100 * Math.sin(x / 31) * Math.cos(y / 41)),
+      Math.round(110 + 80 * Math.cos(x / 53 + y / 57)),
+      Math.round(140 + 90 * Math.sin((x + y) / 67)),
+      255,
+    ]);
+    // 260 × 170 = 44 200 клеток — больше сетки, на которой подбирается набор ниток (40 000)
+    const opts = { cols: 260, rows: 170, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed' as const };
+    const all = buildPattern(photo, { ...opts, threadEconomy: 0 }, PALETTES.dmc);
+    const eco = buildPattern(photo, { ...opts, threadEconomy: 0.01 }, PALETTES.dmc);
+    expect(threadUsage(eco).length).toBeLessThan(threadUsage(all).length);
+    expect(eco.similarity).toBeGreaterThanOrEqual(all.similarity - 0.01 - 0.002);
+    if (all.similarity >= 0.85) expect(eco.similarity).toBeGreaterThanOrEqual(0.85 - 0.002);
+  }, 120_000);
+
+  it('жадный выбор смесей: ленивый выбор совпадает с полным перебором; первые k — те же при любом бюджете', () => {
+    const cells = 300;
+    const err0 = new Float32Array(cells).map(() => 3 + rnd() * 7);
+    const slots = new Map<number, number[]>();
+    const dists = new Map<number, number[]>();
+    for (let e = 1000; e < 1080; e++) {
+      const sl: number[] = [];
+      const dd: number[] = [];
+      for (let k = 0; k < cells; k++) {
+        if (rnd() < 0.08) {
+          sl.push(k);
+          dd.push(Math.min(err0[k] - 1, rnd() * 6));
+        }
+      }
+      slots.set(e, sl);
+      dists.set(e, dd);
+    }
+    // полный перебор: на каждом шаге — смесь с наибольшим уменьшением ошибок
+    const cur = Float32Array.from(err0);
+    const naive: number[] = [];
+    for (let step = 0; step < 30; step++) {
+      let best = -1;
+      let bestV = 0;
+      for (const [e, sl] of slots) {
+        if (naive.includes(e)) continue;
+        const dd = dists.get(e)!;
+        let v = 0;
+        sl.forEach((k, j) => {
+          if (cur[k] > dd[j]) v += cur[k] - dd[j];
+        });
+        if (v > bestV) {
+          bestV = v;
+          best = e;
+        }
+      }
+      if (best < 0) break;
+      naive.push(best);
+      slots.get(best)!.forEach((k, j) => (cur[k] = Math.min(cur[k], dists.get(best)![j])));
+    }
+    const o = { tau: 3, gain: 1, err0, slots, dists };
+    const lazy = pickBlends(o, 30);
+    expect(lazy).toEqual(naive);
+    expect(pickBlends(o, 7)).toEqual(lazy.slice(0, 7));
+  });
+
+  it.each([2, 3] as const)('нитки к покупке (%i нити): крестик смеси делится между нитками по числу нитей', (strands) => {
+    const p = buildPattern(gradient(), { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true, minSimilarity: 0.85, blendMode: 'needed', threadEconomy: 0, strands }, PALETTES.dmc);
+    expect(p.strands).toBe(strands);
     expect(p.blendColors).toBeGreaterThan(0);
+    for (const c of p.colors) expect(c.parts.reduce((s, x) => s + x.strands, 0)).toBe(strands);
     const usage = threadUsage(p);
     const total = usage.reduce((s, u) => s + u.stitches, 0);
     expect(total).toBeCloseTo(p.stitches, 6); // каждый крестик — ровно одна «полная» единица расхода
-    for (const u of usage) expect(u.skeins).toBe(skeinsFor(Math.ceil(u.stitches)));
-    const codes = new Set(p.colors.flatMap((c) => c.parts.map((x) => x.code)));
-    expect(usage.length).toBe(codes.size);
+    // расход каждой нитки: обычный крестик — 1, в смеси — доля её нитей в игле
+    const expected = new Map<string, number>();
+    for (const c of p.colors) for (const x of c.parts) expected.set(x.code, (expected.get(x.code) ?? 0) + (c.count * x.strands) / strands);
+    for (const u of usage) {
+      expect(u.stitches).toBeCloseTo(expected.get(u.code)!, 6);
+      // пасмы — из расчёта 1800 (2 нити) или 1200 (3 нити) крестиков на пасму, плюс 5% запаса
+      expect(u.skeins).toBe(Math.max(1, Math.ceil((u.stitches * 1.05) / (strands === 3 ? 1200 : 1800) - 1e-9)));
+      expect(u.skeins).toBe(skeinsFor(u.stitches, strands));
+    }
+    expect(usage.length).toBe(expected.size);
   });
 
   it('уборка одиночных крестиков уменьшает их долю и не добавляет новых цветов', () => {

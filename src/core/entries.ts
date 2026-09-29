@@ -3,11 +3,12 @@ import { KdTree } from './kdtree';
 import type { ColorSet } from './match';
 
 /**
- * Варианты ниток для схемы: одиночные нитки палитры (2 сложения одного цвета) и смеси —
- * по одной нитке двух цветов в одном крестике. Цвет смеси — среднее двух ниток в линейном RGB
- * (так смешивается отражённый свет двух ниток, лежащих рядом).
+ * Варианты ниток для схемы: обычные нитки палитры (все нити в игле одного цвета) и смеси —
+ * нити двух цветов в одной игле. При 2 нитях в игле смесь одна: 1 + 1; при 3 — две: 2 + 1 и 1 + 2.
+ * Цвет смеси — среднее цветов ниток в линейном RGB с весами по числу нитей (так смешивается
+ * отражённый свет ниток, лежащих рядом).
  *
- * Индексы 0 … threads−1 — одиночные нитки (совпадают с индексами палитры), дальше — смеси.
+ * Индексы 0 … threads−1 — обычные нитки (совпадают с индексами палитры), дальше — смеси.
  */
 export class EntrySet implements ColorSet {
   readonly size: number;
@@ -15,11 +16,13 @@ export class EntrySet implements ColorSet {
   readonly lin: Float32Array;
   /** Для каждого варианта — индексы ниток палитры (одна или две). */
   readonly parts: Array<[number] | [number, number]>;
+  /** Сколько нитей каждого цвета в игле (в том же порядке, что parts). */
+  readonly strands: Array<[number] | [number, number]>;
   private readonly tree: KdTree;
   private readonly buf = new Int32Array(64);
   private readonly q = new Float64Array(3);
 
-  constructor(threadRgbs: ReadonlyArray<readonly number[]>, maxPairDeltaE: number) {
+  constructor(threadRgbs: ReadonlyArray<readonly number[]>, maxPairDeltaE: number, strandsInNeedle = 3) {
     const n = threadRgbs.length;
     const tLin = threadRgbs.map((c) => [SRGB_TO_LINEAR[c[0]], SRGB_TO_LINEAR[c[1]], SRGB_TO_LINEAR[c[2]]]);
     const tLab = tLin.map((l) => {
@@ -28,24 +31,35 @@ export class EntrySet implements ColorSet {
       return out;
     });
     const parts: Array<[number] | [number, number]> = [];
+    const strands: Array<[number] | [number, number]> = [];
     const lins: number[][] = [];
     for (let i = 0; i < n; i++) {
       parts.push([i]);
+      strands.push([strandsInNeedle]);
       lins.push(tLin[i]);
     }
+    // как можно разделить нити в игле между двумя цветами: 1+1 (2 нити) или 2+1 и 1+2 (3 нити)
+    const splits: Array<[number, number]> = [];
+    for (let a = 1; a < strandsInNeedle; a++) splits.push([a, strandsInNeedle - a]);
     if (maxPairDeltaE > 0) {
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
           const a = tLab[i];
           const b = tLab[j];
           if (ciede2000(a[0], a[1], a[2], b[0], b[1], b[2]) > maxPairDeltaE) continue;
-          parts.push([i, j]);
-          lins.push([(tLin[i][0] + tLin[j][0]) / 2, (tLin[i][1] + tLin[j][1]) / 2, (tLin[i][2] + tLin[j][2]) / 2]);
+          for (const [si, sj] of splits) {
+            const wi = si / strandsInNeedle;
+            const wj = sj / strandsInNeedle;
+            parts.push([i, j]);
+            strands.push([si, sj]);
+            lins.push([0, 1, 2].map((k) => wi * tLin[i][k] + wj * tLin[j][k]));
+          }
         }
       }
     }
     this.size = parts.length;
     this.parts = parts;
+    this.strands = strands;
     this.lin = new Float32Array(this.size * 3);
     this.lab = new Float64Array(this.size * 3);
     const lab = [0, 0, 0];

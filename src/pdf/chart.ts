@@ -80,6 +80,7 @@ function drawCover(
     ['На канве Aida 14', `${sizeCm(p.cols)} × ${sizeCm(p.rows)} см`],
     ['Цветов', p.blendColors ? `${p.colors.length} (смесей двух ниток ${p.blendColors})` : String(p.colors.length)],
     ['Ниток к покупке', String(threadUsage(p).length)],
+    ['Нитей в игле', p.strands === 3 ? '3 (смеси 2 + 1)' : '2'],
     ['Крестиков', formatInt(p.stitches)],
     ['Нитки', p.paletteTitle === p.brand ? p.brand : `${p.paletteTitle} (${p.brand})`],
     ['Сходство с фото', formatPercent(p.similarity)],

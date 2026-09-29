@@ -289,6 +289,7 @@ els.form.addEventListener('submit', async (e) => {
   const rows = gridHeight(cols, source.width, source.height);
   const palette = (new FormData(els.form).get('palette') as PaletteId) ?? 'dmc';
   const blendMode = (new FormData(els.form).get('blendMode') as BlendMode) ?? 'rare';
+  const strands = new FormData(els.form).get('strands') === '2' ? 2 : 3;
   const economyChoice = (new FormData(els.form).get('economy') as string) ?? 'normal';
   const maxThreadsValue = Math.min(500, Math.max(8, Math.round(Number(els.maxThreads.value)) || 60));
   const economy =
@@ -312,7 +313,7 @@ els.form.addEventListener('submit', async (e) => {
     const res = await call(
       {
         type: 'build',
-        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blendMode, ...economy },
+        options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, minSimilarity, blendMode, strands, ...economy },
         palette,
       },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
@@ -336,7 +337,8 @@ function renderResult(p: Pattern, requestedMin: number) {
   els.resultTitle.textContent = patternTitle;
   els.resultSub.textContent =
     `${p.cols} × ${p.rows} крестиков · ${sizeCm(p.cols)} × ${sizeCm(p.rows)} см на Aida 14 · нитки ${p.paletteTitle} · ` +
-    (p.blendColors ? 'со смешанными нитками' : 'обычные нитки');
+    `${p.strands} нити в игле` +
+    (p.blendColors ? ' · со смешанными нитками' : '');
   els.statAccuracy.textContent = formatPercent(p.accuracy);
   els.statSimilarity.textContent = formatPercent(p.similarity);
   els.statIsolated.textContent = formatPercent(p.isolated);
@@ -367,7 +369,10 @@ function renderResult(p: Pattern, requestedMin: number) {
     if (p.blendMode === 'none') notes.push(`${lead} Разрешите смешанные нитки или попробуйте ${other}.`);
     else if (p.blendMode === 'rare')
       notes.push(`${lead} Смеси сейчас только в исключительных случаях. Чтобы поднять сходство, выберите «Сколько нужно для сходства» или попробуйте ${other}.`);
-    else notes.push(`${lead} Это самый точный вариант даже со смесями. Попробуйте ${other}.`);
+    else {
+      const eco = p.threadsBeforeEconomy !== undefined ? ' Экономия ниток тоже немного снижает сходство — можно выбрать «Без экономии».' : '';
+      notes.push(`${lead} Со смесями точнее не получается.${eco} Попробуйте ${other}.`);
+    }
   }
   els.resultNote.textContent = notes.join(' ');
   els.resultNote.hidden = notes.length === 0;
@@ -436,7 +441,7 @@ function renderLegend(p: Pattern) {
   els.legendBody.replaceChildren(
     ...p.colors.map((c) =>
       tableRow(
-        [swatch(c.rgb, c.symbol), c.parts.map((x) => x.code).join(' + '), c.name || '—', c.parts.length > 1 ? '1 + 1' : '2', formatInt(c.count)],
+        [swatch(c.rgb, c.symbol), c.parts.map((x) => x.code).join(' + '), c.name || '—', c.parts.map((x) => x.strands).join(' + '), formatInt(c.count)],
         ['', 'code', 'name', 'num', 'num'],
       ),
     ),

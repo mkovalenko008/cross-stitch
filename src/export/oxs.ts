@@ -7,7 +7,7 @@ import { AIDA_COUNT } from '../core/constants';
 // - number = «Бренд номер» (Ursa выравнивает номер пробелами: "DMC    310");
 // - symbol у Ursa — порядковый номер глифа их шрифта; другие программы пишут код символа
 //   и fontname (так делает, например, Embroiderly) — пишем код Unicode и шрифт DejaVu Sans;
-// - смесь двух ниток: у palette_item вложенные элементы <blend number=… color=… strands="1"/>
+// - смесь двух ниток: у palette_item вложенные элементы <blend number=… color=… strands=…/>, strands — нитей этого цвета в игле
 //   (так в описании формата; так же читает и пишет Embroiderly); number — первая нитка;
 // - fullstitches: координаты x, y с нуля, palindex — индекс в палитре; пустые клетки не пишутся;
 // - properties, fullstitches и backstitches обязательны даже пустыми.
@@ -49,25 +49,25 @@ export function buildOxs(p: Pattern, title: string): string {
   );
   out.push('<palette>');
   out.push(
-    '<palette_item index="0" number="cloth" name="cloth" color="FFFFFF" printcolor="FFFFFF" blendcolor="nil" ' +
-      'comments="aida" strands="2" symbol="0" dashpattern="" bsstrands="2" bscolor="FFFFFF"/>',
+    `<palette_item index="0" number="cloth" name="cloth" color="FFFFFF" printcolor="FFFFFF" blendcolor="nil" ` +
+      `comments="aida" strands="${p.strands}" symbol="0" dashpattern="" bsstrands="2" bscolor="FFFFFF"/>`,
   );
   p.colors.forEach((c, i) => {
     const color = hex(c.rgb);
     const first = c.parts[0];
     const attrs =
       `index="${i + 1}" number="${esc(`${p.brand} ${first.code.padStart(6)}`)}" name="${esc(c.name || c.code)}" ` +
-      `color="${color}" printcolor="${color}" blendcolor="nil" comments="" strands="2" ` +
+      `color="${color}" printcolor="${color}" blendcolor="nil" comments="" strands="${p.strands}" ` +
       `symbol="${c.symbol.codePointAt(0)}" fontname="${OXS_SYMBOL_FONT}" dashpattern="" bsstrands="2" bscolor="${color}"`;
     if (c.parts.length === 1) {
       out.push(`<palette_item ${attrs}/>`);
       return;
     }
-    // смесь: по одной нитке каждого цвета — вложенные элементы blend (описание формата Ursa Software)
+    // смесь: нити каждого цвета — вложенные элементы blend (описание формата Ursa Software)
     out.push(`<palette_item ${attrs}>`);
     for (const part of c.parts) {
       out.push(
-        `<blend number="${esc(`${p.brand} ${part.code}`)}" name="${esc(part.name || part.code)}" color="${hex(part.rgb)}" strands="1"/>`,
+        `<blend number="${esc(`${p.brand} ${part.code}`)}" name="${esc(part.name || part.code)}" color="${hex(part.rgb)}" strands="${part.strands}"/>`,
       );
     }
     out.push('</palette_item>');

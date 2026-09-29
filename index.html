@@ -82,7 +82,7 @@
             </div>
 
             <fieldset class="field">
-              <legend class="field__label">Смешанные нитки — по одной нитке двух цветов в иглу</legend>
+              <legend class="field__label">Смешанные нитки — нити двух цветов в одной игле</legend>
               <div class="radio-list">
                 <label class="check">
                   <input type="radio" name="blendMode" value="rare" checked />
@@ -98,6 +98,20 @@
                 </label>
               </div>
               <p class="field__hint">Основа схемы — обычные нитки. Смесь ставится, только если обычная нитка заметно отличается от нужного цвета, а смесь даёт явно лучше; каждая клетка остаётся ровной, без зернистости.</p>
+            </fieldset>
+
+            <fieldset class="field">
+              <legend class="field__label">Нитей в игле</legend>
+              <div class="choice">
+                <label class="choice__item">
+                  <input type="radio" name="strands" value="3" checked />
+                  <span class="choice__box"><span class="choice__name">3 нити</span><span class="choice__meta">Плотное заполнение, у смесей больше оттенков: 2 + 1 и 1 + 2</span></span>
+                </label>
+                <label class="choice__item">
+                  <input type="radio" name="strands" value="2" />
+                  <span class="choice__box"><span class="choice__name">2 нити</span><span class="choice__meta">Тоньше, ниток уходит в 1,5 раза меньше. Смеси — 1 + 1</span></span>
+                </label>
+              </div>
             </fieldset>
 
             <fieldset class="field">
@@ -122,6 +136,7 @@
                   <span><b>Без экономии</b> — все нитки, какие нужны</span>
                 </label>
               </div>
+              <p class="field__hint">Ниже заданного сходство при экономии не опускается, если без неё схема до него дотягивала. В режиме «Сколько нужно для сходства» смесей берётся с запасом — так ниток к покупке выходит меньше.</p>
             </fieldset>
 
             <fieldset class="field">
@@ -187,7 +202,8 @@
         </dl>
         <p class="stats__hint">
           Сходство — какая часть схемы издалека выглядит как фото (разница цвета ΔE ≤ 3), цель — от 85%.
-          «1 + 1» в списке — смесь: в иглу по одной нитке двух цветов.
+          «1 + 2», «2 + 1» или «1 + 1» в списке — смесь: столько нитей каждого цвета в игле, по порядку номеров.
+          Пасмы посчитаны с запасом 5% на обрезки.
           Точность — сколько клеток сохранили свою нитку после удаления редких цветов.
         </p>
         <p class="note" id="resultNote" hidden></p>
