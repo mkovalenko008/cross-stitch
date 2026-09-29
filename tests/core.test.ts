@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ACCURACY_DELTA_E, cleanupRareColors, colorAccuracy, minLadder } from '../src/core/cleanup';
+import { ACCURACY_DELTA_E, TARGET_ACCURACY, cleanupRareColors, colorAccuracy, minLadder } from '../src/core/cleanup';
+import { despeckle, ditherAssign, farSimilarity, isolatedShare, threadsLinear } from '../src/core/dither';
 import { rgb8ToLab } from '../src/core/color';
 import { PaletteMatcher } from '../src/core/match';
 import { buildPattern } from '../src/core/pattern';
@@ -183,7 +184,7 @@ describe('метрика точности', () => {
 describe('сборка схемы', () => {
   it('гладкий градиент: без одиночных крестиков, точность считается, символы уникальны', () => {
     const img = image(300, 200, (x, y) => [Math.round((x / 299) * 255), Math.round((y / 199) * 255), 128, 255]);
-    const p = buildPattern(img, { cols: 60, rows: 40, minStitches: 10, transparentEmpty: true }, PALETTES.dmc);
+    const p = buildPattern(img, { cols: 60, rows: 40, minStitches: 10, transparentEmpty: true, style: 'flat' }, PALETTES.dmc);
     expect(p.cells.length).toBe(60 * 40);
     expect(p.stitches).toBe(60 * 40);
     for (const c of p.colors) expect(c.count).toBeGreaterThanOrEqual(p.minStitches);
@@ -195,12 +196,65 @@ describe('сборка схемы', () => {
     expect(p.accuracy).toBeLessThanOrEqual(1);
   });
 
-  it('при точности < 99% минимум уменьшается, но не ниже 2', () => {
+  it('при точности < 99,9% минимум уменьшается, но не ниже 2', () => {
     // шум: много цветов, почти все редкие
     const img = image(80, 80, () => [Math.floor(rnd() * 256), Math.floor(rnd() * 256), Math.floor(rnd() * 256), 255]);
-    const p = buildPattern(img, { cols: 80, rows: 80, minStitches: 10, transparentEmpty: true }, PALETTES.gamma);
+    const p = buildPattern(img, { cols: 80, rows: 80, minStitches: 10, transparentEmpty: true, style: 'flat' }, PALETTES.gamma);
     expect(p.minStitches).toBeGreaterThanOrEqual(2);
     expect(p.minStitches).toBeLessThan(10);
     for (const c of p.colors) expect(c.count).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('стиль «Как на фото»', () => {
+  const gradient = () =>
+    image(240, 160, (x, y) => [Math.round((x / 239) * 255), Math.round((y / 159) * 200), 90 + Math.round((x / 239) * 60), 255]);
+
+  it('дизеринг использует только нитки палитры, пустые клетки остаются пустыми', () => {
+    const img = image(60, 40, (x, y) => (x < 10 && y < 10 ? [0, 0, 0, 0] : [(x * 4) % 256, (y * 6) % 256, 120, 255]));
+    const grid = resizeToGrid(img, 60, 40, true);
+    const threads = PALETTES.dmc.threads;
+    const m = new PaletteMatcher(threads.map((t) => t.rgb));
+    const d = ditherAssign(grid, m, threadsLinear(threads.map((t) => t.rgb)));
+    d.forEach((v, i) => {
+      if (grid.empty[i]) expect(v).toBe(-1);
+      else expect(v >= 0 && v < threads.length).toBe(true);
+    });
+  });
+
+  it('уборка одиночных крестиков уменьшает их долю и не добавляет новых цветов', () => {
+    const grid = resizeToGrid(gradient(), 120, 80, true);
+    const threads = PALETTES.dmc.threads;
+    const m = new PaletteMatcher(threads.map((t) => t.rgb));
+    const pal = threadsLinear(threads.map((t) => t.rgb));
+    const d = ditherAssign(grid, m, pal);
+    const c = despeckle(d, grid, pal);
+    expect(isolatedShare(c, 120, 80)).toBeLessThan(isolatedShare(d, 120, 80) / 2);
+    const before = new Set(d);
+    c.forEach((v) => expect(before.has(v)).toBe(true));
+  });
+
+  it('на плавном градиенте ближе к исходнику, чем «ровные пятна»', () => {
+    const opts = { cols: 120, rows: 80, minStitches: 10, transparentEmpty: true };
+    const smooth = buildPattern(gradient(), { ...opts, style: 'smooth' }, PALETTES.dmc);
+    const flat = buildPattern(gradient(), { ...opts, style: 'flat' }, PALETTES.dmc);
+    expect(smooth.similarity).toBeGreaterThan(flat.similarity);
+    for (const c of smooth.colors) expect(c.count).toBeGreaterThanOrEqual(smooth.minStitches);
+    expect(smooth.isolated).toBeLessThan(0.1);
+    expect(smooth.accuracy).toBeGreaterThanOrEqual(0.999);
+  });
+
+  it('сходство с фото: одинаковая картинка — 100%', () => {
+    const threads = PALETTES.dmc.threads;
+    const t = threads.findIndex((x) => x.code === '310');
+    const rgb = threads[t].rgb;
+    const grid = resizeToGrid(image(20, 20, () => [...rgb, 255]), 20, 20, true);
+    const r = farSimilarity(new Int16Array(400).fill(t), grid, threadsLinear(threads.map((x) => x.rgb)));
+    expect(r.share).toBe(1);
+    expect(r.meanDeltaE).toBeLessThan(0.01);
+  });
+
+  it('цель точности — 99,9%', () => {
+    expect(TARGET_ACCURACY).toBe(0.999);
   });
 });

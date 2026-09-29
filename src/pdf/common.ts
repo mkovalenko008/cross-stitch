@@ -33,27 +33,28 @@ export function createDoc(fonts: PdfFonts, title: string): jsPDF {
   return doc;
 }
 
-const PT_PER_MM = 72 / 25.4;
+export const PT_PER_MM = 72 / 25.4;
 const glyphs = (metrics as { unitsPerEm: number; glyphs: Record<string, number[]> }).glyphs;
 const UPM = (metrics as { unitsPerEm: number }).unitsPerEm;
 
 /**
- * Рисует символ так, чтобы центр его реальных габаритов совпал с (cx, cy).
- * size — желаемый кегль в мм (высота em); крупные глифы уменьшаются, чтобы
- * уместиться в maxBox мм.
+ * Размер и смещение символа: центр реальных габаритов глифа должен совпасть с центром клетки.
+ * size — желаемый кегль в мм (высота em); крупные глифы уменьшаются, чтобы уместиться в maxBox мм.
+ * Возвращает кегль em (мм) и смещение начала глифа относительно центра (ox, oy, мм).
  */
-export function drawSymbol(doc: jsPDF, symbol: string, cx: number, cy: number, size: number, maxBox: number): void {
+export function glyphPlacement(symbol: string, size: number, maxBox: number): { em: number; ox: number; oy: number } {
   const bb = glyphs[symbol];
-  let em = size;
-  if (bb) {
-    const w = ((bb[2] - bb[0]) / UPM) * em;
-    const h = ((bb[3] - bb[1]) / UPM) * em;
-    const k = Math.min(1, maxBox / Math.max(w, h));
-    em *= k;
-  }
+  if (!bb) return { em: size, ox: 0, oy: size * 0.35 };
+  const w = ((bb[2] - bb[0]) / UPM) * size;
+  const h = ((bb[3] - bb[1]) / UPM) * size;
+  const em = size * Math.min(1, maxBox / Math.max(w, h));
+  return { em, ox: ((bb[0] + bb[2]) / 2 / UPM) * em, oy: ((bb[1] + bb[3]) / 2 / UPM) * em };
+}
+
+/** Рисует символ так, чтобы центр его реальных габаритов совпал с (cx, cy). */
+export function drawSymbol(doc: jsPDF, symbol: string, cx: number, cy: number, size: number, maxBox: number): void {
+  const { em, ox, oy } = glyphPlacement(symbol, size, maxBox);
   doc.setFontSize(em * PT_PER_MM);
-  const ox = bb ? ((bb[0] + bb[2]) / 2 / UPM) * em : 0;
-  const oy = bb ? ((bb[1] + bb[3]) / 2 / UPM) * em : em * 0.35;
   doc.text(symbol, cx - ox, cy + oy, { baseline: 'alphabetic' });
 }
 

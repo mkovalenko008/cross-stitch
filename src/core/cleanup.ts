@@ -12,7 +12,7 @@ import type { PaletteMatcher } from './match';
  */
 export function cleanupRareColors(
   assignment: Int16Array,
-  cellLab: Float64Array,
+  cellLab: Float32Array | Float64Array,
   matcher: PaletteMatcher,
   minCount: number,
   maxColors = Infinity,
@@ -90,8 +90,8 @@ export function colorAccuracy(final: Int16Array, reference: Int16Array, matcher:
   return total === 0 ? 1 : ok / total;
 }
 
-/** Целевая точность. */
-export const TARGET_ACCURACY = 0.99;
+/** Целевая точность: не меньше 99,9% клеток сохраняют свою нитку (или почти такую же). */
+export const TARGET_ACCURACY = 0.999;
 
 /** Минимум крестиков на цвет никогда не опускается ниже 2: одиночных крестиков в схеме нет. */
 export const MIN_STITCHES_FLOOR = 2;

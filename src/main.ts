@@ -2,7 +2,7 @@ import './style.css';
 import { contrastTextIsBlack } from './core/color';
 import { formatInt, formatPercent, sizeCm, skeinsFor } from './core/constants';
 import { TARGET_ACCURACY } from './core/cleanup';
-import type { Pattern } from './core/pattern';
+import type { Pattern, PatternStyle } from './core/pattern';
 import { gridHeight, type RgbaImage } from './core/resize';
 import { PALETTES, type PaletteId } from './palettes';
 import type { ExportKind, WorkerRequest, WorkerResponse } from './workers/protocol';
@@ -10,7 +10,7 @@ import type { ExportKind, WorkerRequest, WorkerResponse } from './workers/protoc
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const MIN_WIDTH = 20;
-const MAX_WIDTH = 500;
+const MAX_WIDTH = 1000;
 /** Больше этого браузеры (особенно Safari на iPhone) не дают прочитать с canvas. */
 const MAX_PIXELS = 16_000_000;
 
@@ -41,6 +41,8 @@ const els = {
   resultSub: $<HTMLParagraphElement>('resultSub'),
   canvas: $<HTMLCanvasElement>('resultCanvas'),
   statAccuracy: $<HTMLElement>('statAccuracy'),
+  statSimilarity: $<HTMLElement>('statSimilarity'),
+  statIsolated: $<HTMLElement>('statIsolated'),
   statColors: $<HTMLElement>('statColors'),
   statStitches: $<HTMLElement>('statStitches'),
   statMin: $<HTMLElement>('statMin'),
@@ -230,12 +232,16 @@ function updateSize() {
   }
   if (!source) {
     els.heightOut.textContent = '—';
-    els.sizeHint.textContent = `${sizeCm(w)} см по ширине на Aida 14. Высота посчитается по пропорциям картинки.`;
+    els.sizeHint.textContent = `${sizeCm(w)} см по ширине на Aida 14.`;
     return;
   }
   const h = gridHeight(w, source.width, source.height);
   els.heightOut.textContent = String(h);
-  els.sizeHint.textContent = `На канве Aida 14: ${sizeCm(w)} × ${sizeCm(h)} см`;
+  els.sizeHint.textContent =
+    `На канве Aida 14: ${sizeCm(w)} × ${sizeCm(h)} см.` +
+    (w > source.width
+      ? ` Картинка шириной ${source.width} пикселей — крестиков больше, чем пикселей, новых деталей не появится.`
+      : '');
 }
 
 els.width.addEventListener('input', updateSize);
@@ -267,6 +273,7 @@ els.form.addEventListener('submit', async (e) => {
   }
   const rows = gridHeight(cols, source.width, source.height);
   const palette = (new FormData(els.form).get('palette') as PaletteId) ?? 'dmc';
+  const style = (new FormData(els.form).get('style') as PatternStyle) ?? 'smooth';
   const minStitches = Math.max(2, Math.round(Number(els.minStitches.value)) || 10);
 
   busy = true;
@@ -276,7 +283,7 @@ els.form.addEventListener('submit', async (e) => {
   setProgress(els.progressBar, els.progressStage, 0, 'Начинаю');
   try {
     const res = await call(
-      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked }, palette },
+      { type: 'build', options: { cols, rows, minStitches, transparentEmpty: els.transparentEmpty.checked, style }, palette },
       (f, s) => setProgress(els.progressBar, els.progressStage, f, s),
     );
     if (res.type !== 'built') throw new Error('Неожиданный ответ');
@@ -297,19 +304,22 @@ els.form.addEventListener('submit', async (e) => {
 function renderResult(p: Pattern, requestedMin: number) {
   els.resultTitle.textContent = patternTitle;
   els.resultSub.textContent =
-    `${p.cols} × ${p.rows} крестиков · ${sizeCm(p.cols)} × ${sizeCm(p.rows)} см на Aida 14 · нитки ${p.paletteTitle}`;
+    `${p.cols} × ${p.rows} крестиков · ${sizeCm(p.cols)} × ${sizeCm(p.rows)} см на Aida 14 · нитки ${p.paletteTitle} · ` +
+    (p.style === 'smooth' ? 'как на фото' : 'ровные пятна');
   els.statAccuracy.textContent = formatPercent(p.accuracy);
+  els.statSimilarity.textContent = formatPercent(p.similarity);
+  els.statIsolated.textContent = formatPercent(p.isolated);
   els.statColors.textContent = String(p.colors.length);
   els.statStitches.textContent = formatInt(p.stitches);
   els.statMin.textContent = String(p.minStitches);
 
   const notes: string[] = [];
   if (p.minStitches < requestedMin) {
-    notes.push(`Минимум снижен с ${requestedMin} до ${p.minStitches}, чтобы точность цвета была не ниже 99%.`);
+    notes.push(`Минимум снижен с ${requestedMin} до ${p.minStitches}, чтобы точность цвета была не ниже 99,9%.`);
   }
   if (p.accuracy < TARGET_ACCURACY) {
     notes.push(
-      `Точность ниже 99% даже при минимуме ${p.minStitches} крестика на цвет: в картинке много мелких редких цветов. ` +
+      `Точность ниже 99,9% даже при минимуме ${p.minStitches} крестика на цвет: в картинке много мелких редких цветов. ` +
         `Помогут бо́льшая ширина или картинка с более крупными деталями.`,
     );
   }

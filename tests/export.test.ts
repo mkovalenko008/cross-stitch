@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { unzlibSync } from 'fflate';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { describe, expect, it } from 'vitest';
 import { STITCHES_PER_SKEIN, skeinsFor } from '../src/core/constants';
@@ -26,7 +27,7 @@ function testPattern(cols: number, rows: number, withHoles = true): Pattern {
   }
   return buildPattern(
     { width: w, height: rows * 4, data },
-    { cols, rows, minStitches: 10, transparentEmpty: true },
+    { cols, rows, minStitches: 10, transparentEmpty: true, style: 'smooth' },
     PALETTES.dmc,
   );
 }
@@ -120,7 +121,7 @@ describe('OXS', () => {
 
   it('Гамма пишется как «Gamma»', () => {
     const img = { width: 20, height: 20, data: new Uint8ClampedArray(20 * 20 * 4).fill(200) };
-    const g = buildPattern(img, { cols: 20, rows: 20, minStitches: 10, transparentEmpty: true }, PALETTES.gamma);
+    const g = buildPattern(img, { cols: 20, rows: 20, minStitches: 10, transparentEmpty: true, style: 'smooth' }, PALETTES.gamma);
     expect(buildOxs(g, 'x')).toMatch(/number="Gamma\s+\d{4}"/);
   });
 });
@@ -133,6 +134,25 @@ describe('PDF', () => {
     const bytes = buildChartPdf(p, 'Тест', fonts);
     expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe('%PDF-');
     expect(pageCount(bytes)).toBe(1 + chartLayout(100, 90).chunks.length);
+  });
+
+  it('схема: символ нарисован в каждой непустой клетке (прямые команды PDF)', () => {
+    const p = testPattern(70, 50);
+    const bytes = buildChartPdf(p, 'Тест', fonts);
+    // распаковываем все потоки и считаем команды символов вида «… Tm <гггг> Tj»
+    const raw = new TextDecoder('latin1').decode(bytes);
+    let glyphs = 0;
+    for (const m of raw.matchAll(/stream\r?\n/g)) {
+      const start = m.index! + m[0].length;
+      const end = raw.indexOf('endstream', start);
+      try {
+        const data = new TextDecoder('latin1').decode(unzlibSync(bytes.subarray(start, end)));
+        glyphs += (data.match(/ Tm <[0-9a-f]{4}> Tj/g) ?? []).length;
+      } catch {
+        // не сжатый поток или шрифт — пропускаем
+      }
+    }
+    expect(glyphs).toBe([...p.cells].filter((c) => c >= 0).length);
   });
 
   it('цвета: открывается, есть итог', () => {

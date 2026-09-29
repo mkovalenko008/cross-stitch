@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Генератор схем для вышивки крестом из картинки: PDF-схема, ключ цветов DMC или Гамма и файл OXS для Cross Stitch Saga. Всё считается в браузере." />
+    <meta name="description" content="Генератор схем для вышивки крестом из картинки: до 1000 крестиков в ширину, PDF-схема, ключ цветов DMC или Гамма и файл OXS для Cross Stitch Saga. Всё считается в браузере." />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d1d1f'/%3E%3Cpath d='M9 9l14 14M23 9L9 23' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E" />
     <title>Схема для вышивки</title>
@@ -24,8 +24,8 @@
         <p class="hero__kicker">Вышивка крестом</p>
         <h1 class="hero__title">Схема из любой картинки.</h1>
         <p class="hero__lead">
-          Загрузите фото — получите схему в PDF, ключ цветов с нитками DMC или Гамма и файл для Cross Stitch Saga.
-          Всё считается в вашем браузере: картинка никуда не отправляется.
+          Загрузите фото — получите схему до 1000 крестиков в ширину: PDF, ключ цветов с нитками DMC или Гамма
+          и файл для Cross Stitch Saga. Всё считается в вашем браузере: картинка никуда не отправляется.
         </p>
       </section>
 
@@ -62,14 +62,29 @@
             <div class="field">
               <label class="field__label" for="width">Ширина, крестиков</label>
               <div class="size-row">
-                <input class="input" id="width" type="number" inputmode="numeric" min="20" max="500" step="1" value="100" />
+                <input class="input" id="width" type="number" inputmode="numeric" min="20" max="1000" step="1" value="100" />
                 <div class="size-row__out">
                   <span class="size-row__label">Высота</span>
                   <output id="heightOut" for="width">—</output>
                 </div>
               </div>
-              <p class="field__hint" id="sizeHint">От 20 до 500. Высота считается по пропорциям картинки.</p>
+              <p class="field__hint">От 20 до 1000 крестиков. Высота считается по пропорциям картинки.</p>
+              <p class="field__hint" id="sizeHint"></p>
             </div>
+
+            <fieldset class="field">
+              <legend class="field__label">Стиль схемы</legend>
+              <div class="choice">
+                <label class="choice__item">
+                  <input type="radio" name="style" value="smooth" checked />
+                  <span class="choice__box"><span class="choice__name">Как на фото</span><span class="choice__meta">Плавные переходы: цвета смешиваются узором из крестиков</span></span>
+                </label>
+                <label class="choice__item">
+                  <input type="radio" name="style" value="flat" />
+                  <span class="choice__box"><span class="choice__name">Ровные пятна</span><span class="choice__meta">Каждая клетка — ближайшая нитка, переходы ступеньками</span></span>
+                </label>
+              </div>
+            </fieldset>
 
             <fieldset class="field">
               <legend class="field__label">Нитки</legend>
@@ -91,7 +106,7 @@
                 <div class="field">
                   <label class="field__label" for="minStitches">Минимум крестиков на цвет</label>
                   <input class="input input--short" id="minStitches" type="number" inputmode="numeric" min="2" max="100" step="1" value="10" />
-                  <p class="field__hint">Цвета с меньшим числом крестиков заменяются ближайшими. Если точность цвета падает ниже 99%, минимум автоматически уменьшается, но не ниже 2.</p>
+                  <p class="field__hint">Цвета с меньшим числом крестиков заменяются ближайшими. Если точность цвета падает ниже 99,9%, минимум автоматически уменьшается, но не ниже 2.</p>
                 </div>
                 <label class="check">
                   <input type="checkbox" id="transparentEmpty" checked />
@@ -124,11 +139,17 @@
         </div>
 
         <dl class="stats">
+          <div class="stats__item"><dt>Сходство с фото</dt><dd id="statSimilarity"></dd></div>
           <div class="stats__item"><dt>Точность передачи цвета</dt><dd id="statAccuracy"></dd></div>
           <div class="stats__item"><dt>Цветов</dt><dd id="statColors"></dd></div>
           <div class="stats__item"><dt>Крестиков</dt><dd id="statStitches"></dd></div>
           <div class="stats__item"><dt>Минимум крестиков на цвет</dt><dd id="statMin"></dd></div>
+          <div class="stats__item"><dt>Одиночных крестиков</dt><dd id="statIsolated"></dd></div>
         </dl>
+        <p class="stats__hint">
+          Сходство — какая часть схемы издалека выглядит как фото (разница цвета ΔE ≤ 3).
+          Точность — сколько клеток сохранили свою нитку после удаления редких цветов.
+        </p>
         <p class="note" id="resultNote" hidden></p>
 
         <div class="downloads">
@@ -144,7 +165,7 @@
         </div>
         <p class="error" id="exportError" role="alert" hidden></p>
 
-        <details class="legend">
+        <details class="legend" open>
           <summary id="legendSummary">Цвета и нитки</summary>
           <div class="legend__table-wrap">
             <table class="legend__table">
@@ -170,12 +191,12 @@
               <p>Для каждой клетки ищем ближайшую нитку по формуле CIEDE2000 — она оценивает разницу цветов так, как её видит человек.</p>
             </article>
             <article class="card how__item">
-              <h3>Без одиночных крестиков</h3>
-              <p>Дизеринга нет. Редкие цвета заменяем ближайшими из схемы, пока у каждого не наберётся минимум крестиков.</p>
+              <h3>Как на фото</h3>
+              <p>Оттенки, которых нет среди ниток, собираются из соседних крестиков — как точки в живописи. Потом одиночные крестики убираются: их остаётся несколько процентов.</p>
             </article>
             <article class="card how__item">
-              <h3>Точность 99%</h3>
-              <p>Доля клеток, где нитка совпала с идеальной или отличается незаметно (ΔE ≤ 2). Если меньше 99% — снижаем минимум.</p>
+              <h3>Точность 99,9%</h3>
+              <p>Редкие цвета заменяются ближайшими, но так, чтобы 99,9% клеток сохранили свою нитку или почти такую же (ΔE ≤ 2). Иначе минимум снижается.</p>
             </article>
           </div>
         </div>

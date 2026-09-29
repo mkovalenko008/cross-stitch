@@ -594,10 +594,19 @@ p {
   image-rendering: crisp-edges;
 }
 .stats {
-  margin: 48px 0 0;
+  margin: 48px auto 0;
+  max-width: 760px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--element-gap);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px var(--element-gap);
+}
+.stats__hint {
+  margin: 20px auto 0;
+  max-width: 560px;
+  color: var(--color-slate);
+  font-size: 12px;
+  line-height: 1.33;
+  letter-spacing: -0.12px;
 }
 .stats__item {
   padding: 0 8px;

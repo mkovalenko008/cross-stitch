@@ -11,7 +11,9 @@ export interface GridColors {
   cols: number;
   rows: number;
   /** Lab каждой клетки: [L, a, b] × (cols·rows). Для пустых клеток — нули. */
-  lab: Float64Array;
+  lab: Float32Array;
+  /** Линейный RGB (0..1) каждой клетки — для дизеринга и оценки сходства. */
+  lin: Float32Array;
   /** 1 — клетка пустая (прозрачная). */
   empty: Uint8Array;
 }
@@ -97,7 +99,8 @@ export function resizeToGrid(
 
   // площадь клетки в единицах «пиксель исходника → клетка»: (cols/width)·(rows/height) на пиксель,
   // а полная клетка = 1·1. Поэтому покрытие клетки = сумма альфы с весами.
-  const lab = new Float64Array(n * 3);
+  const lab = new Float32Array(n * 3);
+  const lin = new Float32Array(n * 3);
   const empty = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const o = i * 4;
@@ -119,8 +122,14 @@ export function resizeToGrid(
       g = acc[o + 1] + bg;
       b = acc[o + 2] + bg;
     }
-    linearRgbToLab(Math.min(1, r), Math.min(1, g), Math.min(1, b), lab, i * 3);
+    r = Math.min(1, r);
+    g = Math.min(1, g);
+    b = Math.min(1, b);
+    lin[i * 3] = r;
+    lin[i * 3 + 1] = g;
+    lin[i * 3 + 2] = b;
+    linearRgbToLab(r, g, b, lab, i * 3);
   }
   onProgress?.(1);
-  return { cols, rows, lab, empty };
+  return { cols, rows, lab, lin, empty };
 }

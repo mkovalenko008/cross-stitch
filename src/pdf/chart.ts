@@ -1,7 +1,7 @@
 import type { jsPDF } from 'jspdf';
 import { formatInt, formatPercent, sizeCm } from '../core/constants';
 import type { Pattern } from '../core/pattern';
-import { FONT, PAGE_H, PAGE_W, createDoc, docToBytes, drawSymbol, pageFooter, previewPng, setFill, symbolTextRgb, type PdfFonts } from './common';
+import { FONT, PAGE_H, PAGE_W, PT_PER_MM, createDoc, docToBytes, glyphPlacement, pageFooter, previewPng, symbolTextRgb, type PdfFonts } from './common';
 import { chartLayout, type Chunk } from './layout';
 
 const MARGIN = 8;
@@ -29,10 +29,11 @@ export function buildChartPdf(pattern: Pattern, title: string, fonts: PdfFonts, 
   const doc = createDoc(fonts, `${title} — схема`);
 
   drawCover(doc, pattern, title, layout.chunks, layout.pagesX, layout.pagesY, totalPages);
+  const symbols = prepareSymbols(doc, pattern, cell);
 
   layout.chunks.forEach((chunk, i) => {
     doc.addPage();
-    drawChunk(doc, pattern, title, chunk, cell, totalPages);
+    drawChunk(doc, pattern, title, chunk, cell, totalPages, symbols);
     onProgress?.((i + 1) / layout.chunks.length);
   });
   return docToBytes(doc);
@@ -79,6 +80,8 @@ function drawCover(
     ['Цветов', String(p.colors.length)],
     ['Крестиков', formatInt(p.stitches)],
     ['Нитки', p.paletteTitle === p.brand ? p.brand : `${p.paletteTitle} (${p.brand})`],
+    ['Стиль', p.style === 'smooth' ? 'как на фото (плавные переходы)' : 'ровные пятна'],
+    ['Сходство с фото', formatPercent(p.similarity)],
     ['Точность передачи цвета', formatPercent(p.accuracy)],
   ];
   doc.setFontSize(10.5);
@@ -128,7 +131,43 @@ function drawCover(
   pageFooter(doc, 1, totalPages);
 }
 
-function drawChunk(doc: jsPDF, p: Pattern, title: string, c: Chunk, s: number, totalPages: number): void {
+/** Дописать готовые команды PDF в содержимое текущей страницы (jsPDF internal.write, нет в типах). */
+function rawWrite(doc: jsPDF, commands: string): void {
+  (doc.internal as unknown as { write: (s: string) => void }).write(commands);
+}
+
+/** Короткая запись числа для команд PDF. */
+function num(v: number, digits = 2): string {
+  const m = 10 ** digits;
+  return String(Math.round(v * m) / m);
+}
+
+interface SymbolGlyphs {
+  fontId: string;
+  glyphs: { hex: string; em: string; ox: number; oy: number; white: number }[];
+}
+
+/** Код глифа каждого символа во встроенном шрифте (заодно глиф попадает в подмножество шрифта), кегль и смещение. */
+function prepareSymbols(doc: jsPDF, p: Pattern, s: number): SymbolGlyphs {
+  doc.setFont(FONT, 'normal');
+  const font = doc.getFont() as unknown as { id: string };
+  const escape = (doc as unknown as { pdfEscape16: (t: string, f: unknown) => string }).pdfEscape16;
+  return {
+    fontId: font.id,
+    glyphs: p.colors.map((col) => {
+      const { em, ox, oy } = glyphPlacement(col.symbol, s * 0.78, s * 0.74);
+      return {
+        hex: escape(col.symbol, font),
+        em: num(em * PT_PER_MM),
+        ox,
+        oy,
+        white: symbolTextRgb(col.rgb)[0] === 255 ? 1 : 0,
+      };
+    }),
+  };
+}
+
+function drawChunk(doc: jsPDF, p: Pattern, title: string, c: Chunk, s: number, totalPages: number, symbols: SymbolGlyphs): void {
   const gw = c.cols * s;
   const gh = c.rows * s;
   const gx = (PAGE_W - gw) / 2;
@@ -148,46 +187,59 @@ function drawChunk(doc: jsPDF, p: Pattern, title: string, c: Chunk, s: number, t
   );
   doc.setTextColor(0, 0, 0);
 
-  // Заливка: подряд идущие клетки одного цвета — одним прямоугольником
+  // Клеток на странице до 4800, поэтому заливку и символы пишем прямо командами PDF
+  // (единицы — пункты, ось Y вверх), а не тысячами вызовов jsPDF: так в разы быстрее.
+  const K = PT_PER_MM;
+  const X = (mm: number) => num(mm * K);
+  const Y = (mm: number) => num((PAGE_H - mm) * K);
+
+  // Заливка: подряд идущие клетки одного цвета — один прямоугольник; прямоугольники сгруппированы по цвету
+  const rects = new Map<number, string[]>();
   for (let r = 0; r < c.rows; r++) {
     const rowBase = (c.y0 + r) * p.cols + c.x0;
+    const top = gy + r * s;
     let run = -1;
     let runStart = 0;
     for (let x = 0; x <= c.cols; x++) {
       const v = x < c.cols ? p.cells[rowBase + x] : -2;
       if (v !== run) {
         if (run >= 0) {
-          setFill(doc, p.colors[run].rgb);
-          doc.rect(gx + runStart * s, gy + r * s, (x - runStart) * s, s, 'F');
+          let list = rects.get(run);
+          if (!list) rects.set(run, (list = []));
+          list.push(`${X(gx + runStart * s)} ${Y(top + s)} ${num((x - runStart) * s * K)} ${num(s * K)} re`);
         }
         run = v;
         runStart = x;
       }
     }
   }
+  const fill: string[] = ['q'];
+  for (const [ci, list] of rects) {
+    const [r, g, b] = p.colors[ci].rgb;
+    fill.push(`${num(r / 255, 4)} ${num(g / 255, 4)} ${num(b / 255, 4)} rg`, list.join('\n'), 'f');
+  }
+  fill.push('Q');
+  rawWrite(doc, fill.join('\n'));
 
-  // Символы
-  doc.setFont(FONT, 'normal');
-  const symSize = s * 0.78;
-  const symBox = s * 0.74;
-  const textRgb = p.colors.map((col) => symbolTextRgb(col.rgb));
-  let curText = '';
+  // Символы: один текстовый блок на страницу; кегль и положение каждого символа — в матрице Tm
+  const text: string[] = ['q', 'BT', `/${symbols.fontId} 1 Tf`];
+  let curWhite = -1;
   for (let r = 0; r < c.rows; r++) {
     const rowBase = (c.y0 + r) * p.cols + c.x0;
     const cy = gy + (r + 0.5) * s;
     for (let x = 0; x < c.cols; x++) {
       const v = p.cells[rowBase + x];
       if (v < 0) continue;
-      const t = textRgb[v];
-      const key = t.join();
-      if (key !== curText) {
-        doc.setTextColor(t[0], t[1], t[2]);
-        curText = key;
+      const g = symbols.glyphs[v];
+      if (g.white !== curWhite) {
+        text.push(g.white ? '1 g' : '0 g');
+        curWhite = g.white;
       }
-      drawSymbol(doc, p.colors[v].symbol, gx + (x + 0.5) * s, cy, symSize, symBox);
+      text.push(`${g.em} 0 0 ${g.em} ${X(gx + (x + 0.5) * s - g.ox)} ${Y(cy + g.oy)} Tm <${g.hex}> Tj`);
     }
   }
-  doc.setTextColor(0, 0, 0);
+  text.push('ET', 'Q');
+  rawWrite(doc, text.join('\n'));
 
   // Сетка: тонкие линии, жирные каждые 10 клеток (по абсолютным номерам)
   doc.setDrawColor(40, 40, 40);

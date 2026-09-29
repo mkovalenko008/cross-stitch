@@ -19,8 +19,8 @@ const colors = SYMBOLS.map((symbol, i) => {
   return { code: t.code, name: t.name, rgb: t.rgb, count: 2, symbol };
 });
 const p: Pattern = {
-  cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма',
-  accuracy: 1, minStitches: 2, referenceColors: n, stitches: n * 2,
+  cols, rows, cells, colors, brand: 'Gamma', paletteTitle: 'Гамма', style: 'flat',
+  accuracy: 1, similarity: 1, isolated: 0, minStitches: 2, referenceColors: n, stitches: n * 2,
 };
 const fonts = {
   regular: new Uint8Array(readFileSync(new URL('../public/fonts/DejaVuSans.ttf', import.meta.url))),
