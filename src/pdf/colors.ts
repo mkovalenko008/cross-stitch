@@ -26,13 +26,14 @@ const COLOR_COLS: Column[] = [
   { title: 'Нитки', w: 18, align: 'center' },
   { title: 'Крестиков', w: 26, align: 'right' },
 ];
-// Нитки к покупке: образец | номер | название | крестиков | пасм
+// Нитки к покупке: образец | номер | название | в крестиках | расход | пасм
 const THREAD_COLS: Column[] = [
   { title: 'Образец', w: 17, align: 'center' },
   { title: 'Номер', w: 22, align: 'left' },
-  { title: 'Название', w: 85, align: 'left' },
-  { title: 'Крестиков', w: 34, align: 'right' },
-  { title: 'Пасм', w: 24, align: 'right' },
+  { title: 'Название', w: 69, align: 'left' },
+  { title: 'В крестиках', w: 27, align: 'right' },
+  { title: 'Расход', w: 25, align: 'right' },
+  { title: 'Пасм', w: 22, align: 'right' },
 ];
 
 /** Простой постраничный вывод: строки добавляются сверху вниз, при нехватке места — новая страница. */
@@ -136,6 +137,25 @@ export function buildColorsPdf(pattern: Pattern, title: string, fonts: PdfFonts)
   pager.y += 8;
   pager.need(12 + HEAD_H + ROW_H);
   section(doc, pager, `Нитки к покупке · ${threads.length}`);
+  // что значат «В крестиках» и «Расход»: у смеси нитка тратится по числу своих нитей в игле
+  const blendRule =
+    pattern.strands === 3
+      ? 'в смеси «1 + 2» у первой нитки одна нить из трёх, и её крестик считается за ⅓, у второй — за ⅔'
+      : 'в смеси «1 + 1» у каждой нитки одна нить из двух, и крестик считается за ½';
+  doc.setFontSize(8.5);
+  const threadsNote = doc.splitTextToSize(
+    (pattern.blendColors
+      ? `«В крестиках» — во скольких крестиках схемы есть нитка: обычных и в смесях. «Расход» — сколько нитки на них уходит ` +
+        `в пересчёте на обычные крестики в ${pattern.strands} нити: ${blendRule}. `
+      : '') + `Пасмы — по расходу: ${formatInt(perSkein)} крестиков на пасму плюс ${Math.round(THREAD_RESERVE * 100)}% запаса.`,
+    WIDTH,
+  ) as string[];
+  const noteLine = (8.5 * doc.getLineHeightFactor() * 25.4) / 72;
+  pager.need(threadsNote.length * noteLine + 3 + HEAD_H + ROW_H);
+  doc.setTextColor(80, 80, 80);
+  doc.text(threadsNote, LEFT, pager.y + 1);
+  doc.setTextColor(0, 0, 0);
+  pager.y += threadsNote.length * noteLine + 3;
   pager.table(THREAD_COLS);
   threads.forEach((u, i) => {
     pager.need(ROW_H);
@@ -153,9 +173,11 @@ export function buildColorsPdf(pattern: Pattern, title: string, fonts: PdfFonts)
     cellText(doc, u.name || '—', x, mid, THREAD_COLS[2].w, 8.5);
     x += THREAD_COLS[2].w;
     doc.setFontSize(9);
-    doc.text(formatInt(Math.round(u.stitches)), x + THREAD_COLS[3].w - 2, mid, { align: 'right', baseline: 'middle' });
+    doc.text(formatInt(u.inStitches), x + THREAD_COLS[3].w - 2, mid, { align: 'right', baseline: 'middle' });
     x += THREAD_COLS[3].w;
-    doc.text(String(u.skeins), x + THREAD_COLS[4].w - 2, mid, { align: 'right', baseline: 'middle' });
+    doc.text(formatInt(Math.round(u.stitches)), x + THREAD_COLS[4].w - 2, mid, { align: 'right', baseline: 'middle' });
+    x += THREAD_COLS[4].w;
+    doc.text(String(u.skeins), x + THREAD_COLS[5].w - 2, mid, { align: 'right', baseline: 'middle' });
     rule(doc, y);
     pager.y += ROW_H;
   });

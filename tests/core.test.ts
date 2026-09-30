@@ -452,8 +452,16 @@ describe('смеси ниток (нити двух цветов в одной и
       // пасмы — из расчёта 1800 (2 нити) или 1200 (3 нити) крестиков на пасму, плюс 5% запаса
       expect(u.skeins).toBe(Math.max(1, Math.ceil((u.stitches * 1.05) / (strands === 3 ? 1200 : 1800) - 1e-9)));
       expect(u.skeins).toBe(skeinsFor(u.stitches, strands));
+      // «В крестиках» — все крестики цветов с этой ниткой; расчёт расхода — по тем же цветам
+      const withThread = p.colors.filter((c) => c.parts.some((x) => x.code === u.code));
+      expect(u.uses.map((x) => x.color)).toEqual(withThread);
+      expect(u.inStitches).toBe(withThread.reduce((s, c) => s + c.count, 0));
+      expect(u.stitches).toBeCloseTo(u.uses.reduce((s, x) => s + (x.color.count * x.strands) / strands, 0), 6);
+      expect(u.inStitches).toBeGreaterThanOrEqual(u.stitches - 1e-9);
     }
     expect(usage.length).toBe(expected.size);
+    // хотя бы у одной нитки из смесей расход меньше числа крестиков, где она есть
+    expect(usage.some((u) => u.inStitches > u.stitches + 1)).toBe(true);
   });
 
   it('уборка одиночных крестиков уменьшает их долю и не добавляет новых цветов', () => {

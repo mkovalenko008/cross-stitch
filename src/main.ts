@@ -1,7 +1,7 @@
 import './style.css';
 import { contrastTextIsBlack } from './core/color';
-import { formatInt, formatPercent, sizeCm } from './core/constants';
-import { threadUsage } from './core/threads';
+import { THREAD_RESERVE, formatInt, formatPercent, sizeCm, stitchesPerSkein } from './core/constants';
+import { threadUsage, type ThreadUsage } from './core/threads';
 import { TARGET_ACCURACY } from './core/cleanup';
 import type { BlendMode, Pattern } from './core/pattern';
 import { gridHeight, type RgbaImage } from './core/resize';
@@ -38,6 +38,7 @@ const els = {
   maxThreads: $<HTMLInputElement>('maxThreads'),
   threadsSummary: $<HTMLElement>('threadsSummary'),
   threadsBody: $<HTMLTableSectionElement>('threadsBody'),
+  threadsHint: $<HTMLElement>('threadsHint'),
   transparentEmpty: $<HTMLInputElement>('transparentEmpty'),
   go: $<HTMLButtonElement>('go'),
   progress: $<HTMLDivElement>('progress'),
@@ -448,11 +449,93 @@ function renderLegend(p: Pattern) {
   );
   const threads = threadUsage(p);
   els.threadsSummary.textContent = `Нитки к покупке · ${threads.length}`;
+  const perSkein = stitchesPerSkein(p.strands);
+  const blendRule =
+    p.strands === 3
+      ? 'в смеси «1 + 2» у первой нитки одна нить из трёх, и её крестик считается за ⅓, у второй — за ⅔'
+      : 'в смеси «1 + 1» у каждой нитки одна нить из двух, и крестик считается за ½';
+  els.threadsHint.textContent =
+    (p.blendColors
+      ? `«В крестиках» — во скольких крестиках схемы есть нитка: обычных и в смесях. «Расход» — сколько нитки на них уходит ` +
+        `в пересчёте на обычные крестики в ${p.strands} нити: ${blendRule}. `
+      : '') +
+    `Пасмы считаются по расходу: ${formatInt(perSkein)} крестиков на пасму плюс ${Math.round(THREAD_RESERVE * 100)}% запаса. ` +
+    `Нажмите на нитку, чтобы увидеть расчёт.`;
   els.threadsBody.replaceChildren(
-    ...threads.map((u) =>
-      tableRow([swatch(u.rgb), u.code, u.name || '—', formatInt(Math.round(u.stitches)), String(u.skeins)], ['', 'code', 'name', 'num', 'num']),
-    ),
+    ...threads.flatMap((u) => {
+      const tr = tableRow(
+        [swatch(u.rgb), u.code, u.name || '—', formatInt(u.inStitches), formatInt(Math.round(u.stitches)), String(u.skeins)],
+        ['', 'code', 'name', 'num', 'num', 'num'],
+      );
+      tr.className = 'legend__row';
+      tr.tabIndex = 0;
+      tr.setAttribute('aria-expanded', 'false');
+      const detail = document.createElement('tr');
+      detail.className = 'legend__detail';
+      detail.hidden = true;
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.append(threadCalc(u, p));
+      detail.append(td);
+      const toggle = () => {
+        detail.hidden = !detail.hidden;
+        tr.setAttribute('aria-expanded', String(!detail.hidden));
+      };
+      tr.addEventListener('click', toggle);
+      tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        }
+      });
+      return [tr, detail];
+    }),
   );
+}
+
+/** Расчёт расхода нитки: из каких цветов схемы он складывается и сколько выходит пасм. */
+function threadCalc(u: ThreadUsage, p: Pattern): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'calc';
+  const head = document.createElement('p');
+  head.textContent = `${u.code} есть в ${u.uses.length} ${plural(u.uses.length, 'цвете', 'цветах', 'цветах')} схемы:`;
+  const list = document.createElement('ul');
+  for (const { color, strands } of u.uses) {
+    const li = document.createElement('li');
+    const what =
+      color.parts.length > 1
+        ? `${color.parts.map((x) => x.code).join(' + ')} «${color.parts.map((x) => x.strands).join(' + ')}»`
+        : `обычная, ${p.strands} ${plural(p.strands, 'нить', 'нити', 'нитей')}`;
+    li.textContent =
+      `${what}: ${formatInt(color.count)} ${plural(color.count, 'крестик', 'крестика', 'крестиков')} × ${fraction(strands, p.strands)}` +
+      ` = ${formatInt(Math.round((color.count * strands) / p.strands))}`;
+    list.append(li);
+  }
+  const perSkein = stitchesPerSkein(p.strands);
+  const raw = (u.stitches * (1 + THREAD_RESERVE)) / perSkein;
+  const total = document.createElement('p');
+  total.className = 'calc__total';
+  total.textContent =
+    `Расход ${formatInt(Math.round(u.stitches))} × ${String(1 + THREAD_RESERVE).replace('.', ',')} (запас) ÷ ${formatInt(perSkein)} ` +
+    `(крестиков на пасму) = ${raw.toFixed(2).replace('.', ',')} → ${u.skeins} ${plural(u.skeins, 'пасма', 'пасмы', 'пасм')}`;
+  box.append(head, list, total);
+  return box;
+}
+
+/** Доля нитки в крестике: 1, ½, ⅓ или ⅔. */
+function fraction(strands: number, inNeedle: number): string {
+  if (strands === inNeedle) return '1';
+  const key = `${strands}/${inNeedle}`;
+  return ({ '1/2': '½', '1/3': '⅓', '2/3': '⅔' } as Record<string, string>)[key] ?? key;
+}
+
+/** Форма слова для числа: 1 пасма, 2 пасмы, 5 пасм. */
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
 }
 
 let resizeTimer = 0;

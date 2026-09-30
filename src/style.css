@@ -746,6 +746,56 @@ p {
 .legend__table .name {
   color: var(--color-slate);
 }
+.legend__hint {
+  margin-top: 12px;
+  color: var(--color-slate);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.08px;
+}
+.legend__row {
+  cursor: pointer;
+}
+.legend__row .code::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 8px;
+  border-right: 1.5px solid var(--color-steel);
+  border-bottom: 1.5px solid var(--color-steel);
+  transform: translateY(-3px) rotate(45deg);
+  transition: transform 0.2s;
+}
+.legend__row[aria-expanded='true'] .code::after {
+  transform: translateY(0) rotate(-135deg);
+}
+.legend__row:hover td,
+.legend__row[aria-expanded='true'] td,
+.legend__detail td {
+  background: var(--color-paper-frost);
+}
+.legend__row[aria-expanded='true'] td {
+  border-bottom-color: transparent;
+}
+.legend__row:focus-visible {
+  outline: 2px solid var(--color-pricing-blue);
+  outline-offset: -2px;
+}
+.legend__detail td {
+  padding: 2px 12px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.calc ul {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.calc__total {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .sym {
   width: 26px;
   height: 26px;
@@ -859,6 +909,11 @@ p {
   .legend__table th:nth-child(3),
   .legend__table td:nth-child(3) {
     display: none;
+  }
+  .legend__table th,
+  .legend__table td {
+    padding-left: 8px;
+    padding-right: 8px;
   }
 }
 
